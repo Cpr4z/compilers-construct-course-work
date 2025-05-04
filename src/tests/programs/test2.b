@@ -17,9 +17,11 @@ max(a, b) {
     if (a > 0) {
         print(1);
     }
+    a = 3;
     auto result;
     result = a;
     /* result = a > b ? a : b; */
     print(result);
+    print(a);
     return (result);
 }

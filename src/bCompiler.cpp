@@ -51,7 +51,8 @@ int main(int argc, const char* argv[])
 //    }
 
 //    std::filesystem::path pathToFile = R"(/Users/matvey_agarkov/Desktop/compilers-construct-course-work/src/tests/programs/test1.b)";
-    std::filesystem::path pathToFile = R"(/Users/matvey_agarkov/Desktop/compilers-construct-course-work/src/tests/programs/test2.b)";
+//    std::filesystem::path pathToFile = R"(/Users/matvey_agarkov/Desktop/compilers-construct-course-work/src/tests/programs/test2.b)";
+    std::filesystem::path pathToFile = R"(/Users/matvey_agarkov/Desktop/compilers-construct-course-work/src/tests/programs/test3.b)";
     std::filesystem::path currentDirectory = std::filesystem::current_path();
     std::string inputFile;
     {

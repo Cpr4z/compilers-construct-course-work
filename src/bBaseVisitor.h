@@ -769,77 +769,156 @@ public:
   virtual std::any visitAssignment(bParser::AssignmentContext *ctx) override
   {
       printInfo(__FUNCTION__, ctx);
+
       std::string varName = ctx->name()->getText();
       m_pendingVariableName = varName;
 
       std::any anyValue = visit(ctx->rvalue());
       llvm::Value* rawValue = nullptr;
 
-      if (anyValue.type() == typeid(variableWrapper))
-      {
+      // Определяем тип значения и извлекаем его
+      if (anyValue.type() == typeid(variableWrapper)) {
           variableWrapper wrapper = std::any_cast<variableWrapper>(anyValue);
-          rawValue = wrapper.value;
+          llvm::Value* ptr = wrapper.value;
+
+          // Если это alloca — загружаем значение
+          if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(ptr)) {
+              rawValue = m_builder.CreateLoad(alloca->getAllocatedType(), alloca, "loaded_from_var");
+          } else {
+              rawValue = ptr;
+          }
       }
-      else if (anyValue.type() == typeid(llvm::Value*))
-      {
+      else if (anyValue.type() == typeid(llvm::Value*)) {
           rawValue = std::any_cast<llvm::Value*>(anyValue);
       }
-      else if (anyValue.type() == typeid(llvm::CallInst*))
-      {
-          llvm::CallInst* call = std::any_cast<llvm::CallInst*>(anyValue);
-          if (!m_namedValues.contains(varName))
-          {
-              llvm::AllocaInst* alloca = m_builder.CreateAlloca(call->getType(), nullptr, varName);
-              m_namedValues[varName] = variableWrapper{alloca, true};
-          }
-
-          llvm::Value* target = m_namedValues[varName].value;
-          if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(target))
-          {
-              m_builder.CreateStore(call, alloca);
-              rawValue = alloca;
-          }
+      else if (anyValue.type() == typeid(llvm::CallInst*)) {
+          rawValue = std::any_cast<llvm::CallInst*>(anyValue);
       }
+      else {
+          std::cerr << "Ошибка: неизвестный тип rvalue в присваивании\n";
+          return nullptr;
+      }
+
       m_pendingVariableName.reset();
-      if (!rawValue)
-      {
-          std::cerr << "Ошибка: rvalue не определено\n";
+
+      if (!rawValue) {
+          std::cerr << "Ошибка: значение присваивания не определено\n";
           return nullptr;
       }
 
-      llvm::Type* loadType = nullptr;
-
-      if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(rawValue))
+      // Если переменная не объявлена — создаем
+      if (!m_namedValues.contains(varName))
       {
-          loadType = alloca->getAllocatedType();
-      }
-      else if (rawValue->getType()->isPointerTy())
-      {
-          loadType = llvm::Type::getInt8Ty(m_context); // строка (char)
-      }
-      else
-      {
-          std::cerr << "Ошибка: неизвестный тип для загрузки\n";
-          return nullptr;
+          llvm::AllocaInst* newAlloca = nullptr;
+          if (llvm::isa<llvm::AllocaInst>(rawValue))
+          {
+              llvm::AllocaInst* oldAlloca = llvm::cast<llvm::AllocaInst>(rawValue);
+                llvm::Type* oldType = oldAlloca->getAllocatedType();
+                newAlloca = m_builder.CreateAlloca(oldType, nullptr, varName);
+              m_namedValues[varName] = variableWrapper{newAlloca, true};
+          }
+          else
+          {
+              newAlloca = m_builder.CreateAlloca(rawValue->getType(), nullptr, varName);
+          }
+//          llvm::AllocaInst* oldAlloca = llvm::cast<llvm::AllocaInst>(rawValue);
+//          llvm::Type* oldType = oldAlloca->getAllocatedType();
+//          llvm::AllocaInst* newAlloca = m_builder.CreateAlloca(oldType, nullptr, varName);
+//          llvm::AllocaInst* newAlloca = m_builder.CreateAlloca(rawValue->getType(), nullptr, varName);
+          m_namedValues[varName] = variableWrapper{newAlloca, true};
       }
 
-      llvm::Value* loaded = m_builder.CreateLoad(loadType, rawValue, "loaded_val");
-
-      if (!m_namedValues.count(varName)) {
-          llvm::AllocaInst* alloc = m_builder.CreateAlloca(loaded->getType(), nullptr, varName);
-          m_namedValues[varName] = {alloc};
-      }
-
+      // Получаем целевую переменную
       llvm::Value* target = m_namedValues[varName].value;
-      if (auto* targetAlloca = llvm::dyn_cast<llvm::AllocaInst>(target))
+      if (auto* destAlloca = llvm::dyn_cast<llvm::AllocaInst>(target))
       {
-          m_builder.CreateStore(loaded, targetAlloca);
+          llvm::Value* valueToStore = rawValue;
+          if (rawValue->getType()->isPointerTy() &&
+              llvm::isa<llvm::AllocaInst>(rawValue))
+          {
+              llvm::Type* storedType = llvm::cast<llvm::AllocaInst>(rawValue)->getAllocatedType();
+              valueToStore = m_builder.CreateLoad(storedType, rawValue, "loaded_rhs");
+          }
+          m_builder.CreateStore(valueToStore, destAlloca);
       }
-      else
-      {
+      else {
+          std::cerr << "Ошибка: переменная " << varName << " не является допустимой alloca\n";
           return nullptr;
       }
-      return loaded;
+
+      return rawValue;
+
+//      std::string varName = ctx->name()->getText();
+//      m_pendingVariableName = varName;
+//
+//      std::any anyValue = visit(ctx->rvalue());
+//      llvm::Value* rawValue = nullptr;
+//
+//      if (anyValue.type() == typeid(variableWrapper))
+//      {
+//          variableWrapper wrapper = std::any_cast<variableWrapper>(anyValue);
+//          rawValue = wrapper.value;
+//      }
+//      else if (anyValue.type() == typeid(llvm::Value*))
+//      {
+//          rawValue = std::any_cast<llvm::Value*>(anyValue);
+//      }
+//      else if (anyValue.type() == typeid(llvm::CallInst*))
+//      {
+//          llvm::CallInst* call = std::any_cast<llvm::CallInst*>(anyValue);
+//          if (!m_namedValues.contains(varName))
+//          {
+//              llvm::AllocaInst* alloca = m_builder.CreateAlloca(call->getType(), nullptr, varName);
+//              m_namedValues[varName] = variableWrapper{alloca, true};
+//          }
+//
+//          llvm::Value* target = m_namedValues[varName].value;
+//          if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(target))
+//          {
+//              m_builder.CreateStore(call, alloca);
+//              rawValue = alloca;
+//          }
+//      }
+//      m_pendingVariableName.reset();
+//      if (!rawValue)
+//      {
+//          std::cerr << "Ошибка: rvalue не определено\n";
+//          return nullptr;
+//      }
+//
+//      llvm::Type* loadType = nullptr;
+//
+//      if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(rawValue))
+//      {
+//          loadType = alloca->getAllocatedType();
+//      }
+//      else if (rawValue->getType()->isPointerTy())
+//      {
+//          loadType = llvm::Type::getInt8Ty(m_context); // строка (char)
+//      }
+//      else
+//      {
+//          std::cerr << "Ошибка: неизвестный тип для загрузки\n";
+//          return nullptr;
+//      }
+//
+//      llvm::Value* loaded = m_builder.CreateLoad(loadType, rawValue, "loaded_val");
+//
+//      if (!m_namedValues.count(varName)) {
+//          llvm::AllocaInst* alloc = m_builder.CreateAlloca(loaded->getType(), nullptr, varName);
+//          m_namedValues[varName] = {alloc};
+//      }
+//
+//      llvm::Value* target = m_namedValues[varName].value;
+//      if (auto* targetAlloca = llvm::dyn_cast<llvm::AllocaInst>(target))
+//      {
+//          m_builder.CreateStore(loaded, targetAlloca);
+//      }
+//      else
+//      {
+//          return nullptr;
+//      }
+//      return loaded;
   }
 
   virtual std::any visitExpression(bParser::ExpressionContext *ctx) override
