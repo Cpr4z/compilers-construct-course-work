@@ -76,6 +76,9 @@ public:
   virtual void enterExpression(bParser::ExpressionContext * /*ctx*/) override { }
   virtual void exitExpression(bParser::ExpressionContext * /*ctx*/) override { }
 
+  virtual void enterExpressionList(bParser::ExpressionListContext * /*ctx*/) override { }
+  virtual void exitExpressionList(bParser::ExpressionListContext * /*ctx*/) override { }
+
   virtual void enterFunctioninvocation(bParser::FunctioninvocationContext * /*ctx*/) override { }
   virtual void exitFunctioninvocation(bParser::FunctioninvocationContext * /*ctx*/) override { }
 

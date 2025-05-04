@@ -1,4 +1,4 @@
-auto main() {
+main() {
     auto n = 10;
     auto i = 0;
     auto j = 0;

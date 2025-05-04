@@ -59,6 +59,8 @@ public:
 
     virtual std::any visitExpression(bParser::ExpressionContext *context) = 0;
 
+    virtual std::any visitExpressionList(bParser::ExpressionListContext *context) = 0;
+
     virtual std::any visitFunctioninvocation(bParser::FunctioninvocationContext *context) = 0;
 
     virtual std::any visitFunctionparameters(bParser::FunctionparametersContext *context) = 0;

@@ -1597,6 +1597,10 @@ bParser::AssignmentContext* bParser::RvalueContext::assignment() {
   return getRuleContext<bParser::AssignmentContext>(0);
 }
 
+bParser::ExpressionListContext* bParser::RvalueContext::expressionList() {
+    return getRuleContext<bParser::ExpressionListContext>(0);
+}
+
 
 size_t bParser::RvalueContext::getRuleIndex() const {
   return bParser::RuleRvalue;
@@ -2052,6 +2056,83 @@ bParser::ExpressionContext* bParser::expression() {
   }
 
   return _localctx;
+}
+
+//----------------- ExpressionListContext ------------------------------------------------------------------
+
+bParser::ExpressionListContext::ExpressionListContext(ParserRuleContext *parent, size_t invokingState)
+        : ParserRuleContext(parent, invokingState) {
+}
+
+std::vector<bParser::RvalueContext *> bParser::ExpressionListContext::rvalue() {
+    return getRuleContexts<bParser::RvalueContext>();
+}
+
+bParser::RvalueContext* bParser::ExpressionListContext::rvalue(size_t i) {
+    return getRuleContext<bParser::RvalueContext>(i);
+}
+
+size_t bParser::ExpressionListContext::getRuleIndex() const {
+    return bParser::RuleExpressionList;
+}
+
+void bParser::ExpressionListContext::enterRule(tree::ParseTreeListener *listener) {
+    auto parserListener = dynamic_cast<bListener *>(listener);
+    if (parserListener != nullptr)
+        parserListener->enterExpressionList(this);
+}
+
+void bParser::ExpressionListContext::exitRule(tree::ParseTreeListener *listener) {
+    auto parserListener = dynamic_cast<bListener *>(listener);
+    if (parserListener != nullptr)
+        parserListener->exitExpressionList(this);
+}
+
+
+std::any bParser::ExpressionListContext::accept(tree::ParseTreeVisitor *visitor) {
+    if (auto parserVisitor = dynamic_cast<bVisitor*>(visitor))
+        return parserVisitor->visitExpressionList(this);
+    else
+        return visitor->visitChildren(this);
+}
+
+bParser::ExpressionListContext* bParser::expressionList() {
+    ExpressionListContext *_localctx = _tracker.createInstance<ExpressionListContext>(_ctx, getState());
+    enterRule(_localctx, 40, bParser::RuleExpressionList);
+    size_t _la = 0;
+
+#if __cplusplus > 201703L
+    auto onExit = finally([=, this] {
+#else
+        auto onExit = finally([=] {
+#endif
+        exitRule();
+    });
+    try {
+        enterOuterAlt(_localctx, 1);
+        setState(249);
+        rvalue();
+        setState(254);
+        _errHandler->sync(this);
+        _la = _input->LA(1);
+        while (_la == bParser::T__0) {
+            setState(250);
+            match(bParser::T__0);
+            setState(251);
+            rvalue();
+            setState(256);
+            _errHandler->sync(this);
+            _la = _input->LA(1);
+        }
+
+    }
+    catch (RecognitionException &e) {
+        _errHandler->reportError(this, e);
+        _localctx->exception = std::current_exception();
+        _errHandler->recover(this, _localctx->exception);
+    }
+
+    return _localctx;
 }
 
 //----------------- FunctioninvocationContext ------------------------------------------------------------------

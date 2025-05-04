@@ -27,10 +27,10 @@ public:
     RuleNullstmt = 4, RuleExpressionstmt = 5, RuleBlockstmt = 6, RuleReturnstmt = 7, 
     RuleGotostmt = 8, RuleSwitchstmt = 9, RuleWhilestmt = 10, RuleIfstmt = 11, 
     RuleCasestmt = 12, RuleExternsmt = 13, RuleAutosmt = 14, RuleRvalue = 15, 
-    RuleTernary = 16, RuleComparison = 17, RuleAssignment = 18, RuleExpression = 19, 
-    RuleFunctioninvocation = 20, RuleFunctionparameters = 21, RuleAssign = 22, 
-    RuleIncdec = 23, RuleUnary = 24, RuleBinary = 25, RuleLvalue = 26, RuleConstant = 27, 
-    RuleName = 28
+    RuleTernary = 16, RuleComparison = 17, RuleAssignment = 18, RuleExpression = 19,
+    RuleExpressionList = 20, RuleFunctioninvocation = 21, RuleFunctionparameters = 22,
+    RuleAssign = 23, RuleIncdec = 24, RuleUnary = 25, RuleBinary = 26, RuleLvalue = 27,
+    RuleConstant = 28, RuleName = 29
   };
 
   explicit bParser(antlr4::TokenStream *input);
@@ -70,6 +70,7 @@ public:
   class ComparisonContext;
   class AssignmentContext;
   class ExpressionContext;
+  class ExpressionListContext;
   class FunctioninvocationContext;
   class FunctionparametersContext;
   class AssignContext;
@@ -342,6 +343,7 @@ public:
     ComparisonContext *comparison();
     TernaryContext *ternary();
     AssignmentContext *assignment();
+    ExpressionListContext *expressionList();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
@@ -422,6 +424,22 @@ public:
   };
 
   ExpressionContext* expression();
+
+    class  ExpressionListContext : public antlr4::ParserRuleContext {
+    public:
+        ExpressionListContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+        virtual size_t getRuleIndex() const override;
+        std::vector<RvalueContext *> rvalue();
+        RvalueContext* rvalue(size_t i);
+
+        virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
+        virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
+
+        virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+
+    };
+
+    ExpressionListContext* expressionList();
 
   class  FunctioninvocationContext : public antlr4::ParserRuleContext {
   public:

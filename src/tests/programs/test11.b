@@ -8,14 +8,18 @@ auto main() {
         a = 77;
         a = 77;
         a = 77;
+        print(a);
     } else if (a > 2) {
         b = 88;
         b = 88;
         b = 88;
+        print(b);
     } else if (a <= 3) {
         b = 99;
+        print(b);
     } else {
         c = 100100;
+        print(c);
     }
 
     if (23 == 34) {

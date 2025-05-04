@@ -9,8 +9,11 @@ auto g(x, y) {
     auto g = x + y;
     g = x - y;
     g = x * y;
-    g = x / y;
-    g = x % y;
+
+    if (y != 0) {
+        g = x / y;
+        g = x % y;
+    }
 
     g = x & y;
     g = x | y;
@@ -40,7 +43,7 @@ auto h(x, y) {
 
 auto main() {
     print(f(2));
-    print(g(1, 0));
+    print(g(1, 1));
     print(h(3, 5));
     return 0;
 }
