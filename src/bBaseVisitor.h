@@ -659,7 +659,7 @@ public:
       }
       else if (anyResult.type() == typeid(llvm::PHINode*))
       {
-          rhs = std::any_cast<llvm::PHINode*>(anyResult); // PHINode is a Value*
+          rhs = std::any_cast<llvm::PHINode*>(anyResult);
       }
       else if (anyResult.type() == typeid(variableWrapper))
       {
@@ -707,7 +707,7 @@ public:
           } else if (lhs == second) {
               actualRhs = second;
           } else {
-              std::cerr << "⚠️ Ошибка: имя переменной в lhs не совпадает ни с одним из вариантов PHI\n";
+              std::cerr << "Ошибка: имя переменной в lhs не совпадает ни с одним из вариантов PHI\n";
               return nullptr;
           }
 
@@ -776,12 +776,11 @@ public:
       std::any anyValue = visit(ctx->rvalue());
       llvm::Value* rawValue = nullptr;
 
-      // Определяем тип значения и извлекаем его
-      if (anyValue.type() == typeid(variableWrapper)) {
+      if (anyValue.type() == typeid(variableWrapper))
+      {
           variableWrapper wrapper = std::any_cast<variableWrapper>(anyValue);
           llvm::Value* ptr = wrapper.value;
 
-          // Если это alloca — загружаем значение
           if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(ptr)) {
               rawValue = m_builder.CreateLoad(alloca->getAllocatedType(), alloca, "loaded_from_var");
           } else {
@@ -806,7 +805,6 @@ public:
           return nullptr;
       }
 
-      // Если переменная не объявлена — создаем
       if (!m_namedValues.contains(varName))
       {
           llvm::AllocaInst* newAlloca = nullptr;
@@ -821,14 +819,9 @@ public:
           {
               newAlloca = m_builder.CreateAlloca(rawValue->getType(), nullptr, varName);
           }
-//          llvm::AllocaInst* oldAlloca = llvm::cast<llvm::AllocaInst>(rawValue);
-//          llvm::Type* oldType = oldAlloca->getAllocatedType();
-//          llvm::AllocaInst* newAlloca = m_builder.CreateAlloca(oldType, nullptr, varName);
-//          llvm::AllocaInst* newAlloca = m_builder.CreateAlloca(rawValue->getType(), nullptr, varName);
           m_namedValues[varName] = variableWrapper{newAlloca, true};
       }
 
-      // Получаем целевую переменную
       llvm::Value* target = m_namedValues[varName].value;
       if (auto* destAlloca = llvm::dyn_cast<llvm::AllocaInst>(target))
       {
@@ -847,78 +840,6 @@ public:
       }
 
       return rawValue;
-
-//      std::string varName = ctx->name()->getText();
-//      m_pendingVariableName = varName;
-//
-//      std::any anyValue = visit(ctx->rvalue());
-//      llvm::Value* rawValue = nullptr;
-//
-//      if (anyValue.type() == typeid(variableWrapper))
-//      {
-//          variableWrapper wrapper = std::any_cast<variableWrapper>(anyValue);
-//          rawValue = wrapper.value;
-//      }
-//      else if (anyValue.type() == typeid(llvm::Value*))
-//      {
-//          rawValue = std::any_cast<llvm::Value*>(anyValue);
-//      }
-//      else if (anyValue.type() == typeid(llvm::CallInst*))
-//      {
-//          llvm::CallInst* call = std::any_cast<llvm::CallInst*>(anyValue);
-//          if (!m_namedValues.contains(varName))
-//          {
-//              llvm::AllocaInst* alloca = m_builder.CreateAlloca(call->getType(), nullptr, varName);
-//              m_namedValues[varName] = variableWrapper{alloca, true};
-//          }
-//
-//          llvm::Value* target = m_namedValues[varName].value;
-//          if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(target))
-//          {
-//              m_builder.CreateStore(call, alloca);
-//              rawValue = alloca;
-//          }
-//      }
-//      m_pendingVariableName.reset();
-//      if (!rawValue)
-//      {
-//          std::cerr << "Ошибка: rvalue не определено\n";
-//          return nullptr;
-//      }
-//
-//      llvm::Type* loadType = nullptr;
-//
-//      if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(rawValue))
-//      {
-//          loadType = alloca->getAllocatedType();
-//      }
-//      else if (rawValue->getType()->isPointerTy())
-//      {
-//          loadType = llvm::Type::getInt8Ty(m_context); // строка (char)
-//      }
-//      else
-//      {
-//          std::cerr << "Ошибка: неизвестный тип для загрузки\n";
-//          return nullptr;
-//      }
-//
-//      llvm::Value* loaded = m_builder.CreateLoad(loadType, rawValue, "loaded_val");
-//
-//      if (!m_namedValues.count(varName)) {
-//          llvm::AllocaInst* alloc = m_builder.CreateAlloca(loaded->getType(), nullptr, varName);
-//          m_namedValues[varName] = {alloc};
-//      }
-//
-//      llvm::Value* target = m_namedValues[varName].value;
-//      if (auto* targetAlloca = llvm::dyn_cast<llvm::AllocaInst>(target))
-//      {
-//          m_builder.CreateStore(loaded, targetAlloca);
-//      }
-//      else
-//      {
-//          return nullptr;
-//      }
-//      return loaded;
   }
 
   virtual std::any visitExpression(bParser::ExpressionContext *ctx) override
@@ -1084,19 +1005,15 @@ public:
       }
 
 
-      if (m_functionBodies.contains(funcName)) {
-          // Сохраняем старые значения (на случай рекурсивных вызовов)
+      if (m_functionBodies.contains(funcName))
+      {
           auto oldNamedValues = m_namedValues;
-
-          // Подставляем аргументы в параметры по имени
           size_t idx = 0;
-          for (auto& arg : callee->args()) {
+          for (auto& arg : callee->args())
+          {
               m_namedValues[arg.getName().str()] = variableWrapper{args[idx++], false};
           }
-
           visitDefinition(m_functionBodies[funcName]);
-
-          // Восстанавливаем старый scope
           m_namedValues = oldNamedValues;
       }
       return m_builder.CreateCall(callee, args, "calltmp");
