@@ -23,6 +23,9 @@ std::unordered_map<std::string, bBaseVisitor::variableWrapper> bBaseVisitor::m_n
 std::unordered_map<std::string, llvm::BasicBlock*> bBaseVisitor::m_labelMap;
 std::stack<std::pair<llvm::SwitchInst*, llvm::BasicBlock*>> bBaseVisitor::m_switchStack;
 
+std::unordered_map<std::string, llvm::Function*> bBaseVisitor::m_namedFunctions;
+std::unordered_map<std::string, bParser::DefinitionContext*> bBaseVisitor::m_functionBodies;
+
 
 int main(int argc, const char* argv[])
 {
@@ -82,23 +85,9 @@ int main(int argc, const char* argv[])
     bBaseVisitor::m_module->setDataLayout(targetMachine->createDataLayout());
     bBaseVisitor::m_module->setTargetTriple(targetTriple);
 
-    llvm::LLVMContext Context;
-
-    auto* main_func_type = llvm::FunctionType::get(llvm::Type::getInt32Ty(Context), false);
-    bBaseVisitor::m_function = llvm::Function::Create(main_func_type,
-                                                      llvm::Function::ExternalLinkage,
-                                                      "main",
-                                                      bBaseVisitor::m_module);
-
-    llvm::BasicBlock* entry = llvm::BasicBlock::Create(Context, "entry", bBaseVisitor::m_function);
-    bBaseVisitor::m_builder.SetInsertPoint(entry);
-    bBaseVisitor::m_blocks.push_back(entry);
-
     bBaseVisitor visitor;
     auto* prog = parser.program();
     visitor.visit(prog);
-
-    bBaseVisitor::m_builder.CreateRet(llvm::ConstantInt::get(llvm::Type::getInt32Ty(Context), 0));
 
     std::error_code EC;
     llvm::raw_fd_ostream File((pathToFile.parent_path() / pathToFile.filename().replace_extension("ll")).string(), EC);

@@ -4,7 +4,10 @@ main() {
     a = 6;
     b = 1981;
 
+    auto tmp;
+    tmp = max(a, b);
     print(max(a, b));
+    /* return (0); */
     /* print(max(6, 1981));
     print(max(6, 1981)); */
 }
@@ -15,7 +18,8 @@ max(a, b) {
         print(1);
     }
     auto result;
-    result = a > b ? a : b;
-    print(a + b);
+    result = a;
+    /* result = a > b ? a : b; */
+    print(result);
     return (result);
 }

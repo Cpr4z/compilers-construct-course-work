@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include <memory>
-
 #include "antlr4-runtime.h"
 #include "bVisitor.h"
 
@@ -23,24 +21,31 @@
  * extended to create a visitor which only needs to handle a subset of the available methods.
  */
 
-inline void printInfo(const std::string& func_name, antlr4::ParserRuleContext* ctx)
-{
-    std::string result;
-    int depth = ctx->depth();
-    while(--depth)
-    {
-        result+= "\t";
-    }
-    std::cout << result + " " + func_name << " " << ctx->getText() << std::endl;
-}
-
-
 class  bBaseVisitor : public bVisitor {
 private:
     struct variableWrapper
     {
         llvm::Value* value = nullptr;
         bool is_int = true;
+    };
+
+    // RAII Object to switch IR context
+    struct ScopedContext
+    {
+        llvm::Function*& m_functionRef;
+        llvm::Function* m_savedFunction;
+        llvm::IRBuilder<>& m_builder;
+        llvm::BasicBlock* m_savedInsertPoint;
+
+        ScopedContext(llvm::Function*& functionRef, llvm::IRBuilder<>& builder)
+                : m_functionRef(functionRef), m_savedFunction(functionRef), m_builder(builder),
+                  m_savedInsertPoint(builder.GetInsertBlock()) {}
+
+        ~ScopedContext() {
+            m_functionRef = m_savedFunction;
+            if (m_savedInsertPoint)
+                m_builder.SetInsertPoint(m_savedInsertPoint);
+        }
     };
 
 public:
@@ -56,9 +61,41 @@ public:
     static std::unordered_map<std::string, llvm::BasicBlock*> m_labelMap;
     static std::stack<std::pair<llvm::SwitchInst*, llvm::BasicBlock*>> m_switchStack;
 
+    static std::unordered_map<std::string, llvm::Function*> m_namedFunctions;
+    static std::unordered_map<std::string, bParser::DefinitionContext*> m_functionBodies;
+
 public:
 
     bBaseVisitor() = default;
+
+    inline void printInfo(const std::string& func_name, antlr4::ParserRuleContext* ctx)
+    {
+        std::string result;
+        int depth = ctx->depth();
+        while(--depth)
+        {
+            result+= "\t";
+        }
+        std::cout << result + " " + func_name << " " << ctx->getText() + " " + currentScope() << std::endl;
+    }
+
+    static std::string currentScope()
+    {
+        llvm::BasicBlock* currentBlock = m_builder.GetInsertBlock();
+        if (currentBlock)
+        {
+            llvm::Function* currentFunction = m_builder.GetInsertBlock()->getParent();
+            if (currentFunction)
+            {
+                return "Current function name: " + currentFunction->getName().str();
+            }
+            else
+            {
+                return "Current block name: " + currentBlock->getName().str();
+            }
+        }
+        return {};
+    }
 
     variableWrapper getOrCreateVariable(const std::string& name)
     {
@@ -98,7 +135,38 @@ public:
       printInfo(__FUNCTION__, ctx);
       for (auto def : ctx->definition())
       {
-          visit(def);
+          std::string functionName = def->name(0)->getText();
+          if (def->statement())
+          {
+              m_functionBodies[functionName] = def;
+
+              std::vector<llvm::Type*> paramTypes;
+              for (size_t i = 1; i < def->name().size(); ++i)
+                  paramTypes.push_back(llvm::Type::getInt32Ty(m_context));
+
+              if (!m_namedFunctions.contains(functionName))
+              {
+                  llvm::FunctionType* funcType = llvm::FunctionType::get(
+                          llvm::Type::getInt32Ty(m_context), paramTypes, false);
+
+                  llvm::Function* func = llvm::Function::Create(
+                          funcType,
+                          llvm::Function::ExternalLinkage,
+                          functionName,
+                          m_module);
+
+                  size_t idx = 1;
+                  for (auto& arg : func->args())
+                      arg.setName(def->name(idx++)->getText());
+
+                  m_namedFunctions[functionName] = func;
+              }
+          }
+      }
+
+      if (m_functionBodies.contains("main"))
+      {
+          visitDefinition(m_functionBodies["main"]);
       }
       return nullptr;
   }
@@ -106,76 +174,51 @@ public:
   virtual std::any visitDefinition(bParser::DefinitionContext *ctx) override
   {
       printInfo(__FUNCTION__, ctx);
-      if (ctx->statement()) {
-          std::string functionName = ctx->name(0)->getText();
 
-          if (functionName == "main") {
-              visit(ctx->statement());
-              return nullptr;
-          }
-
-          std::vector<llvm::Type*> paramTypes;
-          std::vector<std::string> paramNames;
-          for (size_t i = 1; i < ctx->name().size(); ++i)
-          {
-              paramTypes.push_back(llvm::Type::getInt32Ty(m_context));
-              paramNames.push_back(ctx->name(i)->getText());
-          }
-
-          llvm::FunctionType* funcType = llvm::FunctionType::get(
-                  llvm::Type::getVoidTy(m_context),
-                  paramTypes,
-                  false
-          );
-
-          llvm::Function* function = llvm::Function::Create(
-                  funcType,
-                  llvm::Function::ExternalLinkage,
-                  functionName,
-                  m_module
-          );
-
-          size_t idx = 0;
-          for (auto& arg : function->args())
-          {
-              arg.setName(paramNames[idx++]);
-          }
-
-          m_function = function;
-          llvm::BasicBlock* entry = llvm::BasicBlock::Create(m_context, "entry", function);
-          m_blocks.push_back(entry);
-          m_builder.SetInsertPoint(entry);
-
-          visit(ctx->statement());
-          m_builder.CreateRetVoid();
-          m_blocks.pop_back();
-      }
-      else
+      std::string functionName = ctx->name(0)->getText();
+      llvm::Function* function = m_namedFunctions[functionName];
+      if (!function)
       {
-          std::string varName = ctx->name(0)->getText();
-
-          auto ivals = ctx->ival();
-          size_t arraySize = ivals.size();
-
-          llvm::Type* elementType = llvm::Type::getInt32Ty(m_context);
-          llvm::ArrayType* arrayType = llvm::ArrayType::get(elementType, arraySize);
-
-          llvm::AllocaInst* alloc = m_builder.CreateAlloca(arrayType, nullptr, varName);
-
-          for (size_t i = 0; i < arraySize; ++i)
-          {
-              llvm::Value* index = llvm::ConstantInt::get(llvm::Type::getInt32Ty(m_context), i);
-              auto* value = std::any_cast<llvm::Value*>(visit(ivals[i]));
-              std::vector<llvm::Value*> indices = {
-                      llvm::ConstantInt::get(llvm::Type::getInt32Ty(m_context), 0),
-                      index
-              };
-
-              llvm::Value* elemPtr = m_builder.CreateGEP(arrayType, alloc, indices, "arr.elem.ptr");
-              m_builder.CreateStore(value, elemPtr);
-          }
-          m_namedValues[varName] = {alloc};
+          std::cerr << "Ошибка: функция " << functionName << " не найдена\n";
+          return nullptr;
       }
+
+      ScopedContext scoped(m_function, m_builder); // save context
+      m_function = function;
+
+      llvm::BasicBlock* entry = llvm::BasicBlock::Create(m_context, "entry", function);
+      m_blocks.push_back(entry);
+      m_builder.SetInsertPoint(entry);
+
+      m_namedValues.clear();
+      for (auto& arg : function->args()) {
+          llvm::AllocaInst* alloca = m_builder.CreateAlloca(arg.getType(), nullptr, arg.getName());
+          m_builder.CreateStore(&arg, alloca);
+          m_namedValues[arg.getName().str()] = variableWrapper{alloca, true};
+      }
+
+      bool returnsInt = function->getReturnType()->isIntegerTy(32);
+      llvm::AllocaInst* returnValue = nullptr;
+      if (returnsInt) {
+          returnValue = m_builder.CreateAlloca(llvm::Type::getInt32Ty(m_context), nullptr, "retval");
+          m_namedValues["return"] = variableWrapper{returnValue, true};
+      }
+
+      visit(ctx->statement());
+
+      if (!m_builder.GetInsertBlock()->getTerminator()) {
+          if (returnsInt) {
+              llvm::Value* retVal = m_builder.CreateLoad(
+                      llvm::Type::getInt32Ty(m_context),
+                      returnValue,
+                      "ret");
+              m_builder.CreateRet(retVal);
+          } else {
+              m_builder.CreateRetVoid();
+          }
+      }
+
+      m_blocks.pop_back();
       return nullptr;
   }
 
@@ -280,15 +323,40 @@ public:
   virtual std::any visitReturnstmt(bParser::ReturnstmtContext *ctx) override
   {
       printInfo(__FUNCTION__, ctx);
-        if (auto* rvalue = ctx->rvalue())
-        {
-            auto* value = std::any_cast<llvm::Value*>(visit(rvalue));
-            return m_builder.CreateRet(value);
-        }
-        else
-        {
-            return m_builder.CreateRetVoid();
-        }
+
+      if (auto* rvalue = ctx->rvalue())
+      {
+          llvm::Value* value = nullptr;
+          auto anyValue = visit(rvalue);
+
+          if (anyValue.type() == typeid(llvm::Value*)) {
+              value = std::any_cast<llvm::Value*>(anyValue);
+          }
+          else if (anyValue.type() == typeid(variableWrapper)) {
+              auto wrapper = std::any_cast<variableWrapper>(anyValue);
+              value = wrapper.value;
+          }
+
+          if (!value) {
+              std::cerr << "Ошибка: значение для return не получено\n";
+              return nullptr;
+          }
+
+          // Если тип — указатель, надо загрузить значение из него
+          if (value->getType()->isPointerTy()) {
+              value = m_builder.CreateLoad(
+                      llvm::Type::getInt32Ty(m_context),
+                      value,
+                      "ret_val"
+              );
+          }
+
+          return m_builder.CreateRet(value);
+      }
+      else
+      {
+          return m_builder.CreateRetVoid();
+      }
   }
 
   virtual std::any visitGotostmt(bParser::GotostmtContext *ctx) override
@@ -494,8 +562,23 @@ public:
   virtual std::any visitTernary(bParser::TernaryContext *ctx) override
   {
       printInfo(__FUNCTION__, ctx);
+      std::string value = ctx->getText();
+      std::string expression = ctx->expression()->getText();
+      std::cout << expression << std::endl;
+      std::vector<bParser::RvalueContext*> rvalues = ctx->rvalue();
+      for (auto rvalue : rvalues)
+      {
+          std::cout << rvalue->getText() << std::endl;
+      }
       auto* cond = std::any_cast<llvm::Value*>(visit(ctx->expression()));
       if (!cond) return nullptr;
+
+      if (cond->getType()->isPointerTy())
+      {
+          auto* allocaInst = llvm::cast<llvm::AllocaInst>(cond);
+          llvm::Type* elemType = allocaInst->getAllocatedType();
+          cond = m_builder.CreateLoad(elemType, cond, "loaded_cond");
+      }
 
       cond = m_builder.CreateICmpNE(cond, llvm::ConstantInt::get(cond->getType(), 0), "cond");
 
@@ -509,6 +592,7 @@ public:
 
       m_builder.SetInsertPoint(ifTrueBlock);
       auto* trueVal = std::any_cast<llvm::Value*>(visit(ctx->rvalue(0)));
+      std::cout << trueVal->getName().str() << std::endl;
       if (!m_builder.GetInsertBlock()->getTerminator())
       {
           m_builder.CreateBr(mergeBlock);
@@ -519,6 +603,7 @@ public:
       function->insert(function->end(), ifFalseBlock);
       m_builder.SetInsertPoint(ifFalseBlock);
       auto* falseVal = std::any_cast<llvm::Value*>(visit(ctx->rvalue(1)));
+      std::cout << falseVal->getName().str() << std::endl;
       if (!m_builder.GetInsertBlock()->getTerminator())
       {
           m_builder.CreateBr(mergeBlock);
@@ -543,61 +628,142 @@ public:
       std::string value = ctx->expression()->getText();
       std::string op = ctx->binary()->getText();
       std::string rvalue = ctx->rvalue()->getText();
+
       auto anyValue = visit(ctx->expression());
+
+      llvm::Value* rhs = nullptr;
       llvm::Value* lhs = nullptr;
-      try
+
+      if (anyValue.type() == typeid(variableWrapper))
+      {
+          lhs = std::any_cast<variableWrapper>(anyValue).value;
+      }
+      else if (anyValue.type() == typeid(llvm::Value*))
       {
           lhs = std::any_cast<llvm::Value*>(anyValue);
       }
-      catch (...)
+      else if (anyValue.type() == typeid(llvm::PHINode*))
       {
-            return nullptr;
-      }
-
-        llvm::Value* rhs = nullptr;
-        std::any anyResult;
-        try
-        {
-            anyResult = visit(ctx->rvalue());
-            rhs = std::any_cast<llvm::Value*>(anyResult);
-        }
-        catch (...)
-        {
-            variableWrapper wrapper = std::any_cast<variableWrapper>(anyResult);
-            rhs = wrapper.value;
-        }
-
-      llvm::Value* result = nullptr;
-      if (op == "==")
-      {
-          result = m_builder.CreateICmpEQ(lhs, rhs, "eqtmp");
-      }
-      else if (op == "!=")
-      {
-          result = m_builder.CreateICmpNE(lhs, rhs, "netmp");
-      }
-      else if (op == "<")
-      {
-          result = m_builder.CreateICmpSLT(lhs, rhs, "lttmp");
-      }
-      else if (op == "<=")
-      {
-          result = m_builder.CreateICmpSLE(lhs, rhs, "letmp");
-      }
-      else if (op == ">")
-      {
-          result = m_builder.CreateICmpSGT(lhs, rhs, "gttmp");
-      }
-      else if (op == ">=")
-      {
-          result = m_builder.CreateICmpSGE(lhs, rhs, "getmp");
+          lhs = std::any_cast<llvm::PHINode*>(anyValue);
       }
       else
       {
-          std::cerr << "Unknown comparison operator: " << op << "\n";
+          std::cerr << "Ошибка: неподдерживаемый тип lhs\n";
           return nullptr;
       }
-      return result;
+
+      std::any anyResult = visit(ctx->rvalue());
+      if (anyResult.type() == typeid(llvm::Value*))
+      {
+          rhs = std::any_cast<llvm::Value*>(anyResult);
+      }
+      else if (anyResult.type() == typeid(llvm::PHINode*))
+      {
+          rhs = std::any_cast<llvm::PHINode*>(anyResult); // PHINode is a Value*
+      }
+      else if (anyResult.type() == typeid(variableWrapper))
+      {
+          auto wrapper = std::any_cast<variableWrapper>(anyResult);
+          rhs = wrapper.value;
+      }
+      else
+      {
+          std::cerr << "Ошибка: неподдерживаемый тип в anyResult для rvalue\n";
+          return nullptr;
+      }
+
+        auto tryLoad = [&](llvm::Value* value, const std::string& name)-> llvm::Value*
+        {
+          if (value->getType()->isPointerTy())
+          {
+              if (llvm::isa<llvm::AllocaInst>(value))
+              {
+                  auto* allocaInst = llvm::cast<llvm::AllocaInst>(value);
+                  llvm::Type* elemType = allocaInst->getAllocatedType();
+                  return m_builder.CreateLoad(elemType, value, name);
+              }
+              return value;
+          }
+          return value;
+      };
+
+      lhs = tryLoad(lhs, "loaded_lhs");
+      rhs = tryLoad(rhs, "loaded_rhs");
+
+      if (auto* phi = llvm::dyn_cast<llvm::PHINode>(rhs))
+      {
+          std::string lhsName = lhs->getName().str();
+
+          llvm::Value* first  = phi->getIncomingValue(0);
+          llvm::Value* second = phi->getIncomingValue(1);
+
+//          std::string firstName  = first->getName().str();
+//          std::string secondName = second->getName().str();
+
+          llvm::Value* actualRhs = nullptr;
+
+          if (lhs == first) {
+              actualRhs = first;
+          } else if (lhs == second) {
+              actualRhs = second;
+          } else {
+              std::cerr << "⚠️ Ошибка: имя переменной в lhs не совпадает ни с одним из вариантов PHI\n";
+              return nullptr;
+          }
+
+          if (op == ">")
+              return m_builder.CreateICmpSGT(lhs, actualRhs, "gttmp");
+          else if (op == ">=")
+              return m_builder.CreateICmpSGE(lhs, actualRhs, "getmp");
+          else if (op == "==")
+              return m_builder.CreateICmpEQ(lhs, actualRhs, "eqtmp");
+          else if (op == "!=")
+              return m_builder.CreateICmpNE(lhs, actualRhs, "netmp");
+          else if (op == "<")
+              return m_builder.CreateICmpSLT(lhs, actualRhs, "lttmp");
+          else if (op == "<=")
+              return m_builder.CreateICmpSLE(lhs, actualRhs, "letmp");
+      }
+      else
+      {
+          llvm::Value* result = nullptr;
+          if (op == "==")
+          {
+              result = m_builder.CreateICmpEQ(lhs, rhs, "eqtmp");
+          }
+          else if (op == "!=")
+          {
+              result = m_builder.CreateICmpNE(lhs, rhs, "netmp");
+          }
+          else if (op == "<")
+          {
+              result = m_builder.CreateICmpSLT(lhs, rhs, "lttmp");
+          }
+          else if (op == "<=")
+          {
+              result = m_builder.CreateICmpSLE(lhs, rhs, "letmp");
+          }
+          else if (op == ">")
+          {
+              std::cout << lhs->getType()->getTypeID() << std::endl;
+              std::cout << rhs->getType()->getTypeID() << std::endl;
+              std::cout << lhs->getName().str() << std::endl;
+              std::cout << rhs->getName().str() << std::endl;
+
+              result = m_builder.CreateICmpSGT(lhs, rhs, "gttmp");
+          }
+          else if (op == ">=")
+          {
+              result = m_builder.CreateICmpSGE(lhs, rhs, "getmp");
+          }
+          else
+          {
+              std::cerr << "Unknown comparison operator: " << op << "\n";
+              return nullptr;
+          }
+          return result;
+      }
+      return {};
   }
 
   virtual std::any visitAssignment(bParser::AssignmentContext *ctx) override
@@ -607,10 +773,34 @@ public:
       m_pendingVariableName = varName;
 
       std::any anyValue = visit(ctx->rvalue());
-      variableWrapper wrapper = std::any_cast<variableWrapper>(anyValue);
-      m_pendingVariableName.reset();
+      llvm::Value* rawValue = nullptr;
 
-      llvm::Value* rawValue = wrapper.value;
+      if (anyValue.type() == typeid(variableWrapper))
+      {
+          variableWrapper wrapper = std::any_cast<variableWrapper>(anyValue);
+          rawValue = wrapper.value;
+      }
+      else if (anyValue.type() == typeid(llvm::Value*))
+      {
+          rawValue = std::any_cast<llvm::Value*>(anyValue);
+      }
+      else if (anyValue.type() == typeid(llvm::CallInst*))
+      {
+          llvm::CallInst* call = std::any_cast<llvm::CallInst*>(anyValue);
+          if (!m_namedValues.contains(varName))
+          {
+              llvm::AllocaInst* alloca = m_builder.CreateAlloca(call->getType(), nullptr, varName);
+              m_namedValues[varName] = variableWrapper{alloca, true};
+          }
+
+          llvm::Value* target = m_namedValues[varName].value;
+          if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(target))
+          {
+              m_builder.CreateStore(call, alloca);
+              rawValue = alloca;
+          }
+      }
+      m_pendingVariableName.reset();
       if (!rawValue)
       {
           std::cerr << "Ошибка: rvalue не определено\n";
@@ -634,6 +824,12 @@ public:
       }
 
       llvm::Value* loaded = m_builder.CreateLoad(loadType, rawValue, "loaded_val");
+
+      if (!m_namedValues.count(varName)) {
+          llvm::AllocaInst* alloc = m_builder.CreateAlloca(loaded->getType(), nullptr, varName);
+          m_namedValues[varName] = {alloc};
+      }
+
       llvm::Value* target = m_namedValues[varName].value;
       if (auto* targetAlloca = llvm::dyn_cast<llvm::AllocaInst>(target))
       {
@@ -729,6 +925,10 @@ public:
               return nullptr;
           }
           llvm::Value* value = args[0];
+          if (!value)
+          {
+              return nullptr;
+          }
           llvm::Type* valueType = value->getType();
           llvm::Value* finalValue = value;
           const char* format = nullptr;
@@ -786,10 +986,9 @@ public:
           return m_builder.CreateCall(printFunc, {castedStr, finalValue});
       }
 
-      llvm::Function* callee = m_module->getFunction(funcName);
-      if (!callee)
-      {
-          std::cerr << "Ошибка: функция \"" << funcName << "\" не найдена в модуле\n";
+      llvm::Function* callee = m_namedFunctions[funcName];
+      if (!callee) {
+          std::cerr << "Ошибка: функция \"" << funcName << "\" не найдена\n";
           return nullptr;
       }
 
@@ -804,6 +1003,23 @@ public:
           std::cerr << "Ошибка: количество аргументов не совпадает для функции \"" << funcName << "\"\n";
           return nullptr;
       }
+
+
+      if (m_functionBodies.contains(funcName)) {
+          // Сохраняем старые значения (на случай рекурсивных вызовов)
+          auto oldNamedValues = m_namedValues;
+
+          // Подставляем аргументы в параметры по имени
+          size_t idx = 0;
+          for (auto& arg : callee->args()) {
+              m_namedValues[arg.getName().str()] = variableWrapper{args[idx++], false};
+          }
+
+          visitDefinition(m_functionBodies[funcName]);
+
+          // Восстанавливаем старый scope
+          m_namedValues = oldNamedValues;
+      }
       return m_builder.CreateCall(callee, args, "calltmp");
   }
 
@@ -815,15 +1031,19 @@ public:
       {
           auto anyVal = visit(expr);
           llvm::Value* val = nullptr;
-          try
-          {
-              val = std::any_cast<llvm::Value*>(anyVal);
 
+          if (anyVal.type() == typeid(llvm::Value*)) {
+              val = std::any_cast<llvm::Value*>(anyVal);
           }
-          catch (...)
+          else if (anyVal.type() == typeid(variableWrapper)) {
+              val = std::any_cast<variableWrapper>(anyVal).value;
+          }
+          else if (auto* funcCall = dynamic_cast<bParser::FunctioninvocationContext*>(expr))
           {
-              variableWrapper wrapper = std::any_cast<variableWrapper>(anyVal);
-              val = wrapper.value;
+              std::any result = visitFunctioninvocation(funcCall);
+              if (result.has_value()) {
+                  val = std::any_cast<llvm::Value*>(result);
+              }
           }
           args.push_back(val);
       }
@@ -1052,6 +1272,14 @@ public:
       printInfo(__FUNCTION__, ctx);
       std::string name = ctx->getText();
       variableWrapper wrapper = getOrCreateVariable(name);
+      if (wrapper.value)
+      {
+          if (name != wrapper.value->getName().str())
+          {
+              std::cerr << "Name is not suite" << std::endl;
+          }
+          std::cout << name << " == " << wrapper.value->getName().str() << std::endl;
+      }
       return wrapper.value;
   }
 
