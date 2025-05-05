@@ -48,6 +48,29 @@ private:
         }
     };
 
+    llvm::Value* handleIncDec(bParser::IncdecContext* opCtx, bParser::NameContext* nameCtx)
+    {
+        std::string name = nameCtx->getText();
+        variableWrapper wrapper = getOrCreateVariable(name);
+        auto* alloca = llvm::cast<llvm::AllocaInst>(wrapper.value);
+        llvm::Type* type = alloca->getAllocatedType();
+
+        llvm::Value* val = m_builder.CreateLoad(type, alloca, "loadtmp");
+        llvm::Value* one = llvm::ConstantInt::get(type, 1);
+        llvm::Value* result = nullptr;
+
+        if (opCtx->getText() == "++")
+            result = m_builder.CreateAdd(val, one, "inctmp");
+        else if (opCtx->getText() == "--")
+            result = m_builder.CreateSub(val, one, "dectmp");
+        else {
+            std::cerr << "Неизвестный оператор " << opCtx->getText() << "\n";
+            return nullptr;
+        }
+        m_builder.CreateStore(result, alloca);
+        return result;
+    }
+
 public:
     static llvm::LLVMContext m_context;
     static llvm::Module* m_module;
@@ -174,7 +197,6 @@ public:
   virtual std::any visitDefinition(bParser::DefinitionContext *ctx) override
   {
       printInfo(__FUNCTION__, ctx);
-
       std::string functionName = ctx->name(0)->getText();
       llvm::Function* function = m_namedFunctions[functionName];
       if (!function)
@@ -323,7 +345,6 @@ public:
   virtual std::any visitReturnstmt(bParser::ReturnstmtContext *ctx) override
   {
       printInfo(__FUNCTION__, ctx);
-
       if (auto* rvalue = ctx->rvalue())
       {
           llvm::Value* value = nullptr;
@@ -342,7 +363,6 @@ public:
               return nullptr;
           }
 
-          // Если тип — указатель, надо загрузить значение из него
           if (value->getType()->isPointerTy()) {
               value = m_builder.CreateLoad(
                       llvm::Type::getInt32Ty(m_context),
@@ -867,12 +887,12 @@ public:
 
       if (ctx->incdec() && ctx->name())
       {
-          return visit(ctx->incdec());
+          return handleIncDec(ctx->incdec(), ctx->name());
       }
 
       if (ctx->name() && ctx->incdec())
       {
-          return visit(ctx->incdec());
+          return handleIncDec(ctx->incdec(), ctx->name());
       }
 
       if (ctx->unary() && ctx->rvalue())

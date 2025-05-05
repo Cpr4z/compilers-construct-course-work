@@ -113,7 +113,6 @@ rvalue
     | comparison
     | ternary
     | assignment
-    | '[' expressionList? ']'
     ;
 
 ternary
@@ -137,10 +136,6 @@ expression
     | unary rvalue
     | '&' name
     | functioninvocation
-    ;
-
-expressionList
-    : rvalue (',' rvalue)*
     ;
 
 functioninvocation

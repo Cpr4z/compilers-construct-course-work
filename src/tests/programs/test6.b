@@ -1,22 +1,22 @@
-auto Print1() {
+Print1() {
     print("Hi!");
-    return;
+    /* return; */
 }
 
-auto Print2(x) {
+Print2(x) {
     print(x);
-    return;
+    /* return; */
 }
 
-auto Print3(x, y) {
+Print3(x, y) {
     print(x);
     print(y);
-    return;
+    /* return; */
 }
 
-auto main() {
+main() {
     Print1();
-    Print2(3.1415);
+    Print2(31415);
     Print3(777, "Ok!");
-    return 0;
+    /* return 0; */
 }

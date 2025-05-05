@@ -1,10 +1,15 @@
 main() {
-    auto n = 10;
-    auto i = 0;
-    auto j = 0;
-    auto temp = 0;
+    auto n;
+    n = 10;
+    auto i;
+    i = 0;
+    auto j;
+    j = 0;
+    auto temp;
+    temp = 0;
 
-    auto arr = [2, 1, 3, 0, 1, 5, 4, 6, 2, 1];
+    auto arr;
+    arr = [2, 1, 3, 0, 1, 5, 4, 6, 2, 1];
 
     while (i < n) {
         j = 0;
@@ -24,5 +29,4 @@ main() {
         print(arr[i]);
         i = i + 1;
     }
-    return 0;
 }

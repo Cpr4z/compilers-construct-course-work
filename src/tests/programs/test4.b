@@ -1,5 +1,8 @@
-auto main() {
-    auto a = "345";
-    print(!a);
-    return 0;
+main() {
+    auto x;
+    x = 1;
+    ++x;
+    x++;
+    --x;
+    print(x);
 }

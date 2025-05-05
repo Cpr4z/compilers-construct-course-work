@@ -17,7 +17,9 @@ add_executable(${PROJECT_NAME}
         bBaseVisitor.cpp
         bBaseVisitor.h
         bLexer.cpp
+		bLexer.h
         bParser.cpp
+		bParser.h
         bVisitor.cpp
         bVisitor.h
 		bBaseListener.h
