@@ -5,7 +5,6 @@ main() {
     switch x {
         case 1: {
             print(100);
-
         }
         case 2: {
             print(200);

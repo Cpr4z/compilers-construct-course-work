@@ -1,16 +1,12 @@
 main() {
     auto x;
     x = 5;
-
-    goTOfunc(x);
-
+    goTOfunc(0);
     x = -3;
-
-    goTOfunc(x);
+    goTOfunc(4);
 }
 
 goTOfunc(y) {
-    print(y);
     if (y > 0) {
         goto label1;
     }
