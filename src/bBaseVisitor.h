@@ -21,6 +21,12 @@
  * extended to create a visitor which only needs to handle a subset of the available methods.
  */
 
+namespace
+{
+    using namespace std::string_view_literals;
+    std::array<std::string_view, 6> comparasionOperators {"=="sv, "!="sv, "<"sv, "<="sv, ">"sv, ">="sv};
+}
+
 class  bBaseVisitor : public bVisitor {
 private:
     struct variableWrapper
@@ -28,6 +34,12 @@ private:
         llvm::Value* value = nullptr;
         bool is_int = true;
     };
+
+//    struct EvaluatedValue
+//    {
+//        llvm::Value* value = nullptr;
+//        llvm::AllocaInst* target = nullptr;
+//    };
 
     // RAII Object to switch IR context
     struct ScopedContext
@@ -71,6 +83,11 @@ private:
         return result;
     }
 
+    bool isComparisonOperator(const std::string& op)
+    {
+        return std::find(comparasionOperators.begin(), comparasionOperators.end(), op) != comparasionOperators.end();
+    }
+
 public:
     static llvm::LLVMContext m_context;
     static llvm::Module* m_module;
@@ -82,6 +99,7 @@ public:
     static std::vector<llvm::BasicBlock*> m_blocks;
     static std::unordered_map<std::string, variableWrapper> m_namedValues;
     static std::unordered_map<std::string, llvm::BasicBlock*> m_labelMap;
+    static std::unordered_set<std::string> m_pendingLabels;
     static std::stack<std::pair<llvm::SwitchInst*, llvm::BasicBlock*>> m_switchStack;
 
     static std::unordered_map<std::string, llvm::Function*> m_namedFunctions;
@@ -162,7 +180,6 @@ public:
           if (def->statement())
           {
               m_functionBodies[functionName] = def;
-
               std::vector<llvm::Type*> paramTypes;
               for (size_t i = 1; i < def->name().size(); ++i)
                   paramTypes.push_back(llvm::Type::getInt32Ty(m_context));
@@ -265,6 +282,7 @@ public:
   virtual std::any visitStatement(bParser::StatementContext *ctx) override
   {
       printInfo(__FUNCTION__, ctx);
+
       if (ctx->externsmt())
       {
           return visit(ctx->externsmt());
@@ -275,7 +293,44 @@ public:
       }
       else if (ctx->name() && ctx->statement())
       {
+          std::string label = ctx->name()->getText();
+          llvm::Function* function = m_builder.GetInsertBlock()->getParent();
+          llvm::BasicBlock* labelBlock = nullptr;
+          if (m_labelMap.contains(label))
+          {
+              labelBlock = m_labelMap[label];
+          }
+          else
+          {
+              labelBlock = llvm::BasicBlock::Create(m_context, label, function);
+              m_labelMap[label] = labelBlock;
+          }
+
+//          m_blocks.push_back(labelBlock);
+//          m_builder.SetInsertPoint(labelBlock);
+
+          m_blocks.push_back(labelBlock);
+          m_builder.CreateBr(labelBlock);
+          m_builder.SetInsertPoint(labelBlock);
+
           return visit(ctx->statement());
+
+//          if (!m_builder.GetInsertBlock()->getTerminator()) {
+//              m_builder.CreateBr(llvm::BasicBlock::Create(m_context, "after_" + label, function));
+//          }
+
+//          if (!labelBlock->getTerminator()) {
+//              llvm::BasicBlock* afterBlock = llvm::BasicBlock::Create(m_context, "after_" + label, function);
+//              m_builder.CreateBr(afterBlock);
+//              m_blocks.push_back(afterBlock);
+//              m_builder.SetInsertPoint(afterBlock);
+//          }
+
+//          llvm::BasicBlock* after = llvm::BasicBlock::Create(m_context, "after_" + label, function);
+//          m_builder.CreateBr(after);
+//          m_blocks.push_back(after);
+//          m_builder.SetInsertPoint(after);
+//          return nullptr;
       }
       else if (ctx->casestmt())
       {
@@ -382,19 +437,41 @@ public:
   virtual std::any visitGotostmt(bParser::GotostmtContext *ctx) override
   {
       printInfo(__FUNCTION__, ctx);
-        std::string label = ctx->rvalue()->getText();
-        llvm::BasicBlock* targetBlock = m_labelMap[label];
-        m_builder.CreateBr(targetBlock);
-        llvm::BasicBlock* unreachable = llvm::BasicBlock::Create(m_context, "after_goto", m_function);
-        m_blocks.push_back(unreachable);
-        m_builder.SetInsertPoint(unreachable);
-        return nullptr;
+
+      std::string label = ctx->rvalue()->getText();
+      llvm::Function* function = m_builder.GetInsertBlock()->getParent();
+
+      llvm::BasicBlock* targetBlock = nullptr;
+
+      if (m_labelMap.contains(label))
+      {
+          targetBlock = m_labelMap[label];
+      }
+      else
+      {
+          targetBlock = llvm::BasicBlock::Create(m_context, label, function);
+          m_labelMap[label] = targetBlock;
+      }
+
+      m_builder.CreateBr(targetBlock);
+
+      llvm::BasicBlock* unreachable = llvm::BasicBlock::Create(m_context, "after_goto", function);
+      m_blocks.push_back(unreachable);
+      m_builder.SetInsertPoint(unreachable);
+      return nullptr;
   }
 
   virtual std::any visitSwitchstmt(bParser::SwitchstmtContext *ctx) override
   {
       printInfo(__FUNCTION__, ctx);
-      auto* cond = std::any_cast<llvm::Value*>(visit(ctx->rvalue()));
+      llvm::Value* rawCond = std::any_cast<llvm::Value*>(visit(ctx->rvalue()));
+      llvm::Value* cond = rawCond;
+      if (rawCond->getType()->isPointerTy()) {
+          if (auto* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(rawCond)) {
+              llvm::Type* valueType = allocaInst->getAllocatedType();
+              cond = m_builder.CreateLoad(valueType, rawCond, "switch_cond");
+          }
+      }
       llvm::Function* function = m_builder.GetInsertBlock()->getParent();
       llvm::BasicBlock* endBlock = llvm::BasicBlock::Create(m_context, "switch.end", function);
       m_blocks.push_back(endBlock);
@@ -478,6 +555,7 @@ public:
   virtual std::any visitCasestmt(bParser::CasestmtContext *ctx) override
   {
       printInfo(__FUNCTION__, ctx);
+
       if (m_switchStack.empty())
       {
           std::cerr << "Ошибка: case вне switch\n";
@@ -497,13 +575,50 @@ public:
 
       llvm::BasicBlock* caseBlock = llvm::BasicBlock::Create(m_context, "case", function);
       switchInst->addCase(constInt, caseBlock);
+
+      // Переход из предыдущего блока к текущему case, если еще не завершен
       if (!m_builder.GetInsertBlock()->getTerminator())
       {
           m_builder.CreateBr(caseBlock);
       }
+
       m_builder.SetInsertPoint(caseBlock);
       visit(ctx->statement());
+
+      // 🛠 Важно: после case вставить переход к endBlock, если не завершено явно
+      if (!m_builder.GetInsertBlock()->getTerminator())
+      {
+          m_builder.CreateBr(endBlock);
+      }
+
       return nullptr;
+
+//      if (m_switchStack.empty())
+//      {
+//          std::cerr << "Ошибка: case вне switch\n";
+//          return nullptr;
+//      }
+//
+//      auto& [switchInst, endBlock] = m_switchStack.top();
+//      llvm::Function* function = m_builder.GetInsertBlock()->getParent();
+//
+//      auto wrapper = std::any_cast<variableWrapper>(visit(ctx->constant()));
+//      auto* constInt = llvm::dyn_cast<llvm::ConstantInt>(wrapper.value);
+//      if (!constInt)
+//      {
+//          std::cerr << "Ошибка: значение case не является целым числом\n";
+//          return nullptr;
+//      }
+//
+//      llvm::BasicBlock* caseBlock = llvm::BasicBlock::Create(m_context, "case", function);
+//      switchInst->addCase(constInt, caseBlock);
+//      if (!m_builder.GetInsertBlock()->getTerminator())
+//      {
+//          m_builder.CreateBr(caseBlock);
+//      }
+//      m_builder.SetInsertPoint(caseBlock);
+//      visit(ctx->statement());
+//      return nullptr;
   }
 
   virtual std::any visitExternsmt(bParser::ExternsmtContext *ctx) override
@@ -717,9 +832,6 @@ public:
           llvm::Value* first  = phi->getIncomingValue(0);
           llvm::Value* second = phi->getIncomingValue(1);
 
-//          std::string firstName  = first->getName().str();
-//          std::string secondName = second->getName().str();
-
           llvm::Value* actualRhs = nullptr;
 
           if (lhs == first) {
@@ -731,55 +843,141 @@ public:
               return nullptr;
           }
 
-          if (op == ">")
-              return m_builder.CreateICmpSGT(lhs, actualRhs, "gttmp");
-          else if (op == ">=")
-              return m_builder.CreateICmpSGE(lhs, actualRhs, "getmp");
-          else if (op == "==")
-              return m_builder.CreateICmpEQ(lhs, actualRhs, "eqtmp");
-          else if (op == "!=")
-              return m_builder.CreateICmpNE(lhs, actualRhs, "netmp");
-          else if (op == "<")
-              return m_builder.CreateICmpSLT(lhs, actualRhs, "lttmp");
-          else if (op == "<=")
-              return m_builder.CreateICmpSLE(lhs, actualRhs, "letmp");
+          if (isComparisonOperator(op))
+          {
+              if (op == ">")
+              {
+                  return m_builder.CreateICmpSGT(lhs, actualRhs, "gttmp");
+              }
+              else if (op == ">=")
+              {
+                  return m_builder.CreateICmpSGE(lhs, actualRhs, "getmp");
+              }
+              else if (op == "==")
+              {
+                  return m_builder.CreateICmpEQ(lhs, actualRhs, "eqtmp");
+              }
+              else if (op == "!=")
+              {
+                  return m_builder.CreateICmpNE(lhs, actualRhs, "netmp");
+              }
+              else if (op == "<")
+              {
+                  return m_builder.CreateICmpSLT(lhs, actualRhs, "lttmp");
+              }
+              else if (op == "<=")
+              {
+                  return m_builder.CreateICmpSLE(lhs, actualRhs, "letmp");
+              }
+          }
+          else
+          {
+              if (op == "+")
+              {
+                  return m_builder.CreateAdd(lhs, rhs, "addtmp");
+              }
+              else if (op == "-")
+              {
+                  return m_builder.CreateSub(lhs, rhs, "subtmp");
+              }
+              else if (op == "*")
+              {
+                  return m_builder.CreateMul(lhs, rhs, "multmp");
+              }
+              else if (op == "/")
+              {
+                  return m_builder.CreateSDiv(lhs, rhs, "divtmp");
+              }
+              else if (op == "%")
+              {
+                  return m_builder.CreateSRem(lhs, rhs, "modtmp");
+              }
+              else if (op == "<<")
+              {
+                  return m_builder.CreateShl(lhs, rhs, "shltmp");
+              }
+              else if (op == ">>")
+              {
+                    return m_builder.CreateAShr(lhs, rhs, "shrtmp");
+              }
+              else if (op == "&")
+              {
+                  return m_builder.CreateAnd(lhs, rhs, "andtmp");
+              }
+              else if (op == "|")
+              {
+                  return m_builder.CreateOr(lhs, rhs, "ortmp");
+              }
+          }
       }
       else
       {
           llvm::Value* result = nullptr;
-          if (op == "==")
+          if (isComparisonOperator(op))
           {
-              result = m_builder.CreateICmpEQ(lhs, rhs, "eqtmp");
-          }
-          else if (op == "!=")
-          {
-              result = m_builder.CreateICmpNE(lhs, rhs, "netmp");
-          }
-          else if (op == "<")
-          {
-              result = m_builder.CreateICmpSLT(lhs, rhs, "lttmp");
-          }
-          else if (op == "<=")
-          {
-              result = m_builder.CreateICmpSLE(lhs, rhs, "letmp");
-          }
-          else if (op == ">")
-          {
-              std::cout << lhs->getType()->getTypeID() << std::endl;
-              std::cout << rhs->getType()->getTypeID() << std::endl;
-              std::cout << lhs->getName().str() << std::endl;
-              std::cout << rhs->getName().str() << std::endl;
-
-              result = m_builder.CreateICmpSGT(lhs, rhs, "gttmp");
-          }
-          else if (op == ">=")
-          {
-              result = m_builder.CreateICmpSGE(lhs, rhs, "getmp");
+              if (op == ">")
+              {
+                  result = m_builder.CreateICmpSGT(lhs, rhs, "gttmp");
+              }
+              else if (op == ">=")
+              {
+                  result = m_builder.CreateICmpSGE(lhs, rhs, "getmp");
+              }
+              else if (op == "==")
+              {
+                  result = m_builder.CreateICmpEQ(lhs, rhs, "eqtmp");
+              }
+              else if (op == "!=")
+              {
+                  result = m_builder.CreateICmpNE(lhs, rhs, "netmp");
+              }
+              else if (op == "<")
+              {
+                  result = m_builder.CreateICmpSLT(lhs, rhs, "lttmp");
+              }
+              else if (op == "<=")
+              {
+                  result = m_builder.CreateICmpSLE(lhs, rhs, "letmp");
+              }
           }
           else
           {
-              std::cerr << "Unknown comparison operator: " << op << "\n";
-              return nullptr;
+              if (op == "+")
+              {
+                  result = m_builder.CreateAdd(lhs, rhs, "addtmp");
+              }
+              else if (op == "-")
+              {
+                  result = m_builder.CreateSub(lhs, rhs, "subtmp");
+              }
+              else if (op == "*")
+              {
+                  result = m_builder.CreateMul(lhs, rhs, "multmp");
+              }
+              else if (op == "/")
+              {
+                  result = m_builder.CreateSDiv(lhs, rhs, "divtmp");
+              }
+              else if (op == "%")
+              {
+                  result = m_builder.CreateSRem(lhs, rhs, "modtmp");
+              }
+              else if (op == "<<")
+              {
+                  result = m_builder.CreateShl(lhs, rhs, "shltmp");
+              }
+              else if (op == ">>")
+              {
+                  result = m_builder.CreateAShr(lhs, rhs, "shrtmp");
+              }
+              else if (op == "&")
+              {
+                  result = m_builder.CreateAnd(lhs, rhs, "andtmp");
+              }
+              else if (op == "|")
+              {
+                  result = m_builder.CreateOr(lhs, rhs, "ortmp");
+              }
           }
           return result;
       }
@@ -858,7 +1056,6 @@ public:
           std::cerr << "Ошибка: переменная " << varName << " не является допустимой alloca\n";
           return nullptr;
       }
-
       return rawValue;
   }
 

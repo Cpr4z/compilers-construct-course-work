@@ -1,24 +1,17 @@
-auto f(x) {
-    auto a = "Yes";
-    auto y = x;
-    auto f = 3.1415;
-    return 0;
-}
+main() {
+    auto x;
+    x = 2;
 
-auto h(x, y) {
-    auto a = "Ok";
-    return a;
-}
+    switch x {
+        case 1: {
+            print(100);
 
-auto p(a, b, c) {
-    auto d = "D";
-    auto e = "E";
-    auto p = "P";
-    return p;
-}
-
-auto main() {
-    auto a = "Yes" + "?";
-    print(a);
-    return 0;
+        }
+        case 2: {
+            print(200);
+        }
+        case 3: {
+            print(300);
+        }
+    }
 }

@@ -1,15 +1,19 @@
-auto Gcd(auto x, auto y) {
-    while (x * y != 0) {
-        if (x > y) {
-            x = x - y;
-        } else {
-            y = y - x;
-        }
-    }
-    return x + y;
+main() {
+    auto x;
+    x = 5;
+
+    goTOfunc(x);
+
+    x = -3;
+
+    goTOfunc(x);
 }
 
-auto main() {
-    print(Gcd(18, 192));
-    return 0;
+goTOfunc(y) {
+    print(y);
+    if (y > 0) {
+        goto label1;
+    }
+    print(0);
+    label1 : print(42);
 }

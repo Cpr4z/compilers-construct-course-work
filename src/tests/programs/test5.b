@@ -3,14 +3,14 @@ main() {
     n = 5;
     while (n != 0) {
         print(n);
-        n = n - 1;
+        n--;
     }
-    f("hello", 42);
-    /* return 0; */
+    f(24, 42);
+    return (0);
 }
 
 f(s, y) {
     print(s);
     print(y);
-    /* return 0; */
+    return (0);
 }

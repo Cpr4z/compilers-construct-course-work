@@ -12,5 +12,4 @@ main() {
     print('abcd');
     print(a);
     print(b);
-    /* print('abc'); */
 }
