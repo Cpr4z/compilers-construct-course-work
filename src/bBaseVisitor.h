@@ -69,8 +69,9 @@ private:
             result = m_builder.CreateAdd(val, one, "inctmp");
         else if (opCtx->getText() == "--")
             result = m_builder.CreateSub(val, one, "dectmp");
-        else {
-            std::cerr << "Неизвестный оператор " << opCtx->getText() << "\n";
+        else
+        {
+//            std::cerr << "Неизвестный оператор " << opCtx->getText() << "\n";
             return nullptr;
         }
         m_builder.CreateStore(result, alloca);
@@ -177,7 +178,6 @@ public:
               std::vector<llvm::Type*> paramTypes;
               for (size_t i = 1; i < def->name().size(); ++i)
                   paramTypes.push_back(llvm::Type::getInt32Ty(m_context));
-//                  paramTypes.push_back(llvm::PointerType::getUnqual(llvm::Type::getInt32Ty(m_context)));
 
               if (!m_namedFunctions.contains(functionName))
               {
@@ -213,11 +213,11 @@ public:
       llvm::Function* function = m_namedFunctions[functionName];
       if (!function)
       {
-          std::cerr << "Ошибка: функция " << functionName << " не найдена\n";
+//          std::cerr << "Ошибка: функция " << functionName << " не найдена\n";
           return nullptr;
       }
 
-      ScopedContext scoped(m_function, m_builder); // save context
+      ScopedContext scoped(m_function, m_builder);
       m_function = function;
 
       llvm::BasicBlock* entry = llvm::BasicBlock::Create(m_context, "entry", function);
@@ -400,7 +400,6 @@ public:
                       "ret_val"
               );
           }
-
           return m_builder.CreateRet(value);
       }
       else
@@ -533,7 +532,7 @@ public:
 
       if (m_switchStack.empty())
       {
-          std::cerr << "Ошибка: case вне switch\n";
+//          std::cerr << "Ошибка: case вне switch\n";
           return nullptr;
       }
 
@@ -544,14 +543,13 @@ public:
       auto* constInt = llvm::dyn_cast<llvm::ConstantInt>(wrapper.value);
       if (!constInt)
       {
-          std::cerr << "Ошибка: значение case не является целым числом\n";
+//          std::cerr << "Ошибка: значение case не является целым числом\n";
           return nullptr;
       }
 
       llvm::BasicBlock* caseBlock = llvm::BasicBlock::Create(m_context, "case", function);
       switchInst->addCase(constInt, caseBlock);
 
-      // Переход из предыдущего блока к текущему case, если еще не завершен
       if (!m_builder.GetInsertBlock()->getTerminator())
       {
           m_builder.CreateBr(caseBlock);
@@ -560,40 +558,12 @@ public:
       m_builder.SetInsertPoint(caseBlock);
       visit(ctx->statement());
 
-      // 🛠 Важно: после case вставить переход к endBlock, если не завершено явно
       if (!m_builder.GetInsertBlock()->getTerminator())
       {
           m_builder.CreateBr(endBlock);
       }
 
       return nullptr;
-
-//      if (m_switchStack.empty())
-//      {
-//          std::cerr << "Ошибка: case вне switch\n";
-//          return nullptr;
-//      }
-//
-//      auto& [switchInst, endBlock] = m_switchStack.top();
-//      llvm::Function* function = m_builder.GetInsertBlock()->getParent();
-//
-//      auto wrapper = std::any_cast<variableWrapper>(visit(ctx->constant()));
-//      auto* constInt = llvm::dyn_cast<llvm::ConstantInt>(wrapper.value);
-//      if (!constInt)
-//      {
-//          std::cerr << "Ошибка: значение case не является целым числом\n";
-//          return nullptr;
-//      }
-//
-//      llvm::BasicBlock* caseBlock = llvm::BasicBlock::Create(m_context, "case", function);
-//      switchInst->addCase(constInt, caseBlock);
-//      if (!m_builder.GetInsertBlock()->getTerminator())
-//      {
-//          m_builder.CreateBr(caseBlock);
-//      }
-//      m_builder.SetInsertPoint(caseBlock);
-//      visit(ctx->statement());
-//      return nullptr;
   }
 
   virtual std::any visitExternsmt(bParser::ExternsmtContext *ctx) override
@@ -660,7 +630,7 @@ public:
           return visit(ctx->assignment());
       }
 
-      // массив
+      // TODO remove
       if (ctx->expressionList())
       {
           auto raw = visit(ctx->expressionList());
@@ -675,7 +645,6 @@ public:
 
       llvm::Function* function = m_builder.GetInsertBlock()->getParent();
 
-      // Хелпер для безопасного извлечения значения
       auto unwrapValue = [&](std::any raw, const std::string& label) -> llvm::Value*
       {
           llvm::Value* val = nullptr;
@@ -702,12 +671,11 @@ public:
 
           if (!val)
           {
-              std::cerr << "Ошибка: не удалось извлечь значение " << label << "\n";
+//              std::cerr << "Ошибка: не удалось извлечь значение " << label << "\n";
           }
           return val;
       };
 
-      // Условие
       llvm::Value* cond = unwrapValue(visit(ctx->expression()), "cond");
       if (!cond)
       {
@@ -726,14 +694,12 @@ public:
               "cond_bool"
       );
 
-      // Блоки
       llvm::BasicBlock* trueBlock = llvm::BasicBlock::Create(m_context, "ternary.true", function);
       llvm::BasicBlock* falseBlock = llvm::BasicBlock::Create(m_context, "ternary.false");
       llvm::BasicBlock* mergeBlock = llvm::BasicBlock::Create(m_context, "ternary.merge");
 
       m_builder.CreateCondBr(cond, trueBlock, falseBlock);
 
-      // TRUE
       m_builder.SetInsertPoint(trueBlock);
       llvm::Value* trueVal = unwrapValue(visit(ctx->rvalue(0)), "true");
       if (!trueVal)
@@ -744,7 +710,6 @@ public:
           m_builder.CreateBr(mergeBlock);
       trueBlock = m_builder.GetInsertBlock();
 
-      // FALSE
       function->insert(function->end(), falseBlock);
       m_builder.SetInsertPoint(falseBlock);
       llvm::Value* falseVal = unwrapValue(visit(ctx->rvalue(1)), "false");
@@ -756,191 +721,12 @@ public:
           m_builder.CreateBr(mergeBlock);
       falseBlock = m_builder.GetInsertBlock();
 
-      // MERGE
       function->insert(function->end(), mergeBlock);
       m_builder.SetInsertPoint(mergeBlock);
       llvm::PHINode* phi = m_builder.CreatePHI(trueVal->getType(), 2, "ternarytmp");
       phi->addIncoming(trueVal, trueBlock);
       phi->addIncoming(falseVal, falseBlock);
       return phi;
-
-
-
-//      return static_cast<llvm::Value*>(phi);
-
-//      llvm::Function* function = m_builder.GetInsertBlock()->getParent();
-//
-//      // Условие
-//      llvm::Value* cond = std::any_cast<llvm::Value*>(visit(ctx->expression()));
-//      if (!cond) return nullptr;
-//
-//      if (cond->getType()->isPointerTy())
-//      {
-//          llvm::Type* type = llvm::cast<llvm::AllocaInst>(cond)->getAllocatedType();
-//          cond = m_builder.CreateLoad(type, cond, "loaded_cond");
-//      }
-//
-//      cond = m_builder.CreateICmpNE(cond, llvm::ConstantInt::get(cond->getType(), 0), "cond");
-//
-//      // Базовые блоки
-//      llvm::BasicBlock* trueBlock = llvm::BasicBlock::Create(m_context, "ternary.true", function);
-//      llvm::BasicBlock* falseBlock = llvm::BasicBlock::Create(m_context, "ternary.false");
-//      llvm::BasicBlock* mergeBlock = llvm::BasicBlock::Create(m_context, "ternary.merge");
-//
-//      m_builder.CreateCondBr(cond, trueBlock, falseBlock);
-//
-//      // TRUE
-//      m_builder.SetInsertPoint(trueBlock);
-//      llvm::Value* trueVal = std::any_cast<llvm::Value*>(visit(ctx->rvalue(0)));
-//      if (trueVal->getType()->isPointerTy())
-//      {
-//          llvm::Type* type = llvm::cast<llvm::AllocaInst>(trueVal)->getAllocatedType();
-//          trueVal = m_builder.CreateLoad(type, trueVal, "true_loaded");
-//      }
-//      if (!m_builder.GetInsertBlock()->getTerminator())
-//          m_builder.CreateBr(mergeBlock);
-//      trueBlock = m_builder.GetInsertBlock();
-//
-//      // FALSE
-//      function->insert(function->end(), falseBlock);
-//      m_builder.SetInsertPoint(falseBlock);
-//      llvm::Value* falseVal = std::any_cast<llvm::Value*>(visit(ctx->rvalue(1)));
-//      if (falseVal->getType()->isPointerTy())
-//      {
-//          llvm::Type* type = llvm::cast<llvm::AllocaInst>(falseVal)->getAllocatedType();
-//          falseVal = m_builder.CreateLoad(type, falseVal, "false_loaded");
-//      }
-//      if (!m_builder.GetInsertBlock()->getTerminator())
-//          m_builder.CreateBr(mergeBlock);
-//      falseBlock = m_builder.GetInsertBlock();
-//
-//      // MERGE
-//      function->insert(function->end(), mergeBlock);
-//      m_builder.SetInsertPoint(mergeBlock);
-//
-//      llvm::PHINode* phi = m_builder.CreatePHI(trueVal->getType(), 2, "ternarytmp");
-//      phi->addIncoming(trueVal, trueBlock);
-//      phi->addIncoming(falseVal, falseBlock);
-//      return phi;
-
-//      llvm::Value* cond = std::any_cast<llvm::Value*>(visit(ctx->expression()));
-//      if (!cond) return nullptr;
-//
-//      // Загружаем значение если это указатель
-//      if (cond->getType()->isPointerTy() && llvm::isa<llvm::AllocaInst>(cond)) {
-//          auto* allocaInst = llvm::cast<llvm::AllocaInst>(cond);
-//          llvm::Type* elemType = allocaInst->getAllocatedType();
-//          cond = m_builder.CreateLoad(elemType, cond, "loaded_cond");
-//      }
-//
-//      // Явное приведение к bool
-//      cond = m_builder.CreateICmpNE(cond, llvm::ConstantInt::get(cond->getType(), 0), "cond");
-//
-//      llvm::Function* function = m_builder.GetInsertBlock()->getParent();
-//      llvm::BasicBlock* ifTrueBlock = llvm::BasicBlock::Create(m_context, "ternary.true", function);
-//      llvm::BasicBlock* ifFalseBlock = llvm::BasicBlock::Create(m_context, "ternary.false");
-//      llvm::BasicBlock* mergeBlock  = llvm::BasicBlock::Create(m_context, "ternary.merge");
-//
-//      m_builder.CreateCondBr(cond, ifTrueBlock, ifFalseBlock);
-//
-//      // Ветка true
-//      m_builder.SetInsertPoint(ifTrueBlock);
-//      llvm::Value* trueVal = std::any_cast<llvm::Value*>(visit(ctx->rvalue(0)));
-//      if (!m_builder.GetInsertBlock()->getTerminator())
-//          m_builder.CreateBr(mergeBlock);
-//      ifTrueBlock = m_builder.GetInsertBlock();
-//
-//      // Ветка false
-//      function->insert(function->end(), ifFalseBlock);
-//      m_builder.SetInsertPoint(ifFalseBlock);
-//      llvm::Value* falseVal = std::any_cast<llvm::Value*>(visit(ctx->rvalue(1)));
-//      if (!m_builder.GetInsertBlock()->getTerminator())
-//          m_builder.CreateBr(mergeBlock);
-//      ifFalseBlock = m_builder.GetInsertBlock();
-//
-//      // PHI + merge
-//      function->insert(function->end(), mergeBlock);
-//      m_builder.SetInsertPoint(mergeBlock);
-//
-//      llvm::Type* valueType = trueVal->getType();
-//      llvm::PHINode* phi = m_builder.CreatePHI(valueType, 2, "ternarytmp");
-//      phi->addIncoming(trueVal, ifTrueBlock);
-//      phi->addIncoming(falseVal, ifFalseBlock);
-//
-//      // Если присваивание — сохранить результат в переменную
-//      if (m_pendingVariableName)
-//      {
-//          const std::string& varName = *m_pendingVariableName;
-//          if (!m_namedValues.contains(varName))
-//          {
-//              llvm::AllocaInst* alloca = m_builder.CreateAlloca(valueType, nullptr, varName);
-//              m_namedValues[varName] = variableWrapper{alloca, true};
-//          }
-//
-//          llvm::Value* dest = m_namedValues[varName].value;
-//          if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(dest)) {
-//              m_builder.CreateStore(phi, alloca);
-//              return alloca; // вернуть указатель на переменную
-//          }
-//      }
-//      return phi;
-
-//      std::string value = ctx->getText();
-//      std::string expression = ctx->expression()->getText();
-//      std::cout << expression << std::endl;
-//      std::vector<bParser::RvalueContext*> rvalues = ctx->rvalue();
-//      for (auto rvalue : rvalues)
-//      {
-//          std::cout << rvalue->getText() << std::endl;
-//      }
-//      auto* cond = std::any_cast<llvm::Value*>(visit(ctx->expression()));
-//      if (!cond) return nullptr;
-//
-//      if (cond->getType()->isPointerTy())
-//      {
-//          auto* allocaInst = llvm::cast<llvm::AllocaInst>(cond);
-//          llvm::Type* elemType = allocaInst->getAllocatedType();
-//          cond = m_builder.CreateLoad(elemType, cond, "loaded_cond");
-//      }
-//
-//      cond = m_builder.CreateICmpNE(cond, llvm::ConstantInt::get(cond->getType(), 0), "cond");
-//
-//      llvm::Function* function = m_builder.GetInsertBlock()->getParent();
-//
-//      llvm::BasicBlock* ifTrueBlock = llvm::BasicBlock::Create(m_context, "ternary.true", function);
-//      llvm::BasicBlock* ifFalseBlock = llvm::BasicBlock::Create(m_context, "ternary.false");
-//      llvm::BasicBlock* mergeBlock  = llvm::BasicBlock::Create(m_context, "ternary.merge");
-//
-//      m_builder.CreateCondBr(cond, ifTrueBlock, ifFalseBlock);
-//
-//      m_builder.SetInsertPoint(ifTrueBlock);
-//      auto* trueVal = std::any_cast<llvm::Value*>(visit(ctx->rvalue(0)));
-//      std::cout << trueVal->getName().str() << std::endl;
-//      if (!m_builder.GetInsertBlock()->getTerminator())
-//      {
-//          m_builder.CreateBr(mergeBlock);
-//      }
-//
-//      ifTrueBlock = m_builder.GetInsertBlock();
-//
-//      function->insert(function->end(), ifFalseBlock);
-//      m_builder.SetInsertPoint(ifFalseBlock);
-//      auto* falseVal = std::any_cast<llvm::Value*>(visit(ctx->rvalue(1)));
-//      std::cout << falseVal->getName().str() << std::endl;
-//      if (!m_builder.GetInsertBlock()->getTerminator())
-//      {
-//          m_builder.CreateBr(mergeBlock);
-//      }
-//
-//      ifFalseBlock = m_builder.GetInsertBlock();
-//
-//      function->insert(function->end(), mergeBlock);
-//      m_builder.SetInsertPoint(mergeBlock);
-//
-//      llvm::PHINode* phi = m_builder.CreatePHI(trueVal->getType(), 2, "ternarytmp");
-//      phi->addIncoming(trueVal, ifTrueBlock);
-//      phi->addIncoming(falseVal, ifFalseBlock);
-//      return phi;
   }
 
   virtual std::any visitComparison(bParser::ComparisonContext *ctx) override
@@ -978,7 +764,7 @@ public:
               phiNode = phi;
               return phi;
           }
-          std::cerr << "Ошибка: неподдерживаемый тип значения (" << name << ")\n";
+//          std::cerr << "Ошибка: неподдерживаемый тип значения (" << name << ")\n";
           return nullptr;
       };
 
@@ -1108,8 +894,9 @@ public:
               result = m_builder.CreateAnd(lhs, rhs, "andtmp");
           else if (op == "|")
               result = m_builder.CreateOr(lhs, rhs, "ortmp");
-          else {
-              std::cerr << "Ошибка: неизвестный бинарный оператор: " << op << "\n";
+          else
+          {
+//              std::cerr << "Ошибка: неизвестный бинарный оператор: " << op << "\n";
               return nullptr;
           }
       }
@@ -1146,15 +933,16 @@ public:
       else if (anyValue.type() == typeid(llvm::PHINode*)) {
           rawValue = std::any_cast<llvm::PHINode*>(anyValue);
       }
-      else {
-          std::cerr << "Ошибка: неизвестный тип rvalue в присваивании\n";
+      else
+      {
+//          std::cerr << "Ошибка: неизвестный тип rvalue в присваивании\n";
           return nullptr;
       }
 
       m_pendingVariableName.reset();
 
       if (!rawValue) {
-          std::cerr << "Ошибка: значение присваивания не определено\n";
+//          std::cerr << "Ошибка: значение присваивания не определено\n";
           return nullptr;
       }
 
@@ -1180,27 +968,20 @@ public:
       {
           llvm::Value* valueToStore = rawValue;
 
-          if (llvm::isa<llvm::AllocaInst>(rawValue)) {
+          if (llvm::isa<llvm::AllocaInst>(rawValue))
+          {
               auto* alloca = llvm::cast<llvm::AllocaInst>(rawValue);
               llvm::Type* type = alloca->getAllocatedType();
               valueToStore = m_builder.CreateLoad(type, rawValue, "loaded_rhs");
           }
-          else if (llvm::isa<llvm::PHINode>(rawValue)) {
-              // PHINode уже содержит значение — не нужно делать load
+          else if (llvm::isa<llvm::PHINode>(rawValue))
+          {
               valueToStore = rawValue;
           }
-          else if (rawValue->getType()->isPointerTy()) {
-              // generic pointer case — возможно, временный ptr
-              // можно пропустить или закинуть в stderr для отладки
-              std::cerr << "Предупреждение: pointer value без alloca/PHI: " << varName << "\n";
+          else if (rawValue->getType()->isPointerTy())
+          {
+//              std::cerr << "Предупреждение: pointer value без alloca/PHI: " << varName << "\n";
           }
-
-//          if (rawValue->getType()->isPointerTy() &&
-//              llvm::isa<llvm::AllocaInst>(rawValue))
-//          {
-//              llvm::Type* storedType = llvm::cast<llvm::AllocaInst>(rawValue)->getAllocatedType();
-//              valueToStore = m_builder.CreateLoad(storedType, rawValue, "loaded_rhs");
-//          }
           m_builder.CreateStore(valueToStore, destAlloca);
       }
       else {
@@ -1258,8 +1039,7 @@ public:
       {
           return visit(ctx->functioninvocation());
       }
-
-      std::cerr << "Не удалось распознать выражение\n";
+//      std::cerr << "Не удалось распознать выражение\n";
       return nullptr;
   }
 
@@ -1277,159 +1057,6 @@ public:
   virtual std::any visitFunctioninvocation(bParser::FunctioninvocationContext *ctx) override
   {
       printInfo(__FUNCTION__, ctx);
-
-//      std::string funcName = ctx->name()->getText();
-//
-//      // --- Обработка функции print() ---
-//      if (funcName == "print")
-//      {
-//          std::vector<llvm::Value*> args;
-//
-//          if (auto* functionParameters = ctx->functionparameters())
-//          {
-//              args = std::any_cast<std::vector<llvm::Value*>>(visit(functionParameters));
-//          }
-//
-//          if (args.empty())
-//          {
-//              std::cerr << "Ошибка: print() должен принимать хотя бы один аргумент\n";
-//              return nullptr;
-//          }
-//
-//          llvm::Value* value = args[0];
-//          if (!value)
-//              return nullptr;
-//
-//          llvm::Type* valueType = value->getType();
-//          llvm::Value* finalValue = value;
-//          const char* format = nullptr;
-//
-//          if (valueType->isPointerTy())
-//          {
-//              if (llvm::isa<llvm::ConstantExpr>(value) || llvm::isa<llvm::GlobalVariable>(value))
-//              {
-//                  finalValue = value;
-//                  format = "%s\n";
-//              }
-//              else if (llvm::isa<llvm::AllocaInst>(value))
-//              {
-//                  auto allocaInst = llvm::cast<llvm::AllocaInst>(value);
-//                  llvm::Type* elementType = allocaInst->getAllocatedType();
-//                  finalValue = m_builder.CreateLoad(elementType, value, "loaded_int");
-//                  format = "%d\n";
-//              }
-//              else
-//              {
-//                  std::cerr << "Ошибка: неизвестный pointer type\n";
-//                  return nullptr;
-//              }
-//          }
-//          else if (valueType->isIntegerTy(32))
-//          {
-//              format = "%d\n";
-//              finalValue = value;
-//          }
-//          else if (valueType->isFloatTy())
-//          {
-//              format = "%f\n";
-//              finalValue = value;
-//          }
-//          else
-//          {
-//              std::cerr << "Ошибка: неподдерживаемый тип литерала\n";
-//              return nullptr;
-//          }
-//
-//          llvm::GlobalVariable* formatStr = m_builder.CreateGlobalString(format);
-//          llvm::Function* printFunc = getOrCreatePrint();
-//
-//          if (!printFunc)
-//          {
-//              std::cerr << "Ошибка: print не добавлен в модуль\n";
-//              return nullptr;
-//          }
-//
-//          llvm::Value* castedStr = m_builder.CreatePointerCast(
-//                  formatStr,
-//                  llvm::PointerType::get(llvm::Type::getInt8Ty(m_context), 0)
-//          );
-//
-//          return m_builder.CreateCall(printFunc, {castedStr, finalValue});
-//      }
-//
-//      // --- Общий случай вызова функции ---
-//      llvm::Function* callee = m_namedFunctions[funcName];
-//      if (!callee)
-//      {
-//          std::cerr << "Ошибка: функция \"" << funcName << "\" не найдена\n";
-//          return nullptr;
-//      }
-//
-//      std::vector<llvm::Value*> args;
-//
-//      if (auto* functionParameters = ctx->functionparameters())
-//      {
-//          auto params = functionParameters->rvalue();
-//          for (auto* param : params)
-//          {
-//              std::any anyArg = visit(param);
-//              llvm::Value* val = nullptr;
-//
-//              if (anyArg.type() == typeid(variableWrapper))
-//              {
-//                  auto wrapper = std::any_cast<variableWrapper>(anyArg);
-//                  llvm::Value* ptr = wrapper.value;
-//
-//                  if (llvm::isa<llvm::AllocaInst>(ptr))
-//                  {
-//                      llvm::Type* type = llvm::cast<llvm::AllocaInst>(ptr)->getAllocatedType();
-//                      val = m_builder.CreateLoad(type, ptr, "loaded_arg");
-//                  }
-//                  else
-//                  {
-//                      val = ptr;
-//                  }
-//              }
-//              else if (anyArg.type() == typeid(llvm::Value*))
-//              {
-//                  val = std::any_cast<llvm::Value*>(anyArg);
-//              }
-//              else if (anyArg.type() == typeid(llvm::ConstantInt*))
-//              {
-//                  val = std::any_cast<llvm::ConstantInt*>(anyArg);
-//              }
-//              else
-//              {
-//                  std::cerr << "Ошибка: неподдерживаемый тип аргумента\n";
-//                  return nullptr;
-//              }
-//
-//              args.push_back(val);
-//          }
-//      }
-//
-//      if (callee->arg_size() != args.size())
-//      {
-//          std::cerr << "Ошибка: количество аргументов не совпадает для функции \"" << funcName << "\"\n";
-//          return nullptr;
-//      }
-//
-//      // --- Выполнение тела вызываемой функции (inline interpretation) ---
-//      if (m_functionBodies.contains(funcName))
-//      {
-//          auto oldNamedValues = m_namedValues;
-//          size_t idx = 0;
-//          for (auto& arg : callee->args())
-//          {
-//              m_namedValues[arg.getName().str()] = variableWrapper{args[idx++], false};
-//          }
-//
-//          visitDefinition(m_functionBodies[funcName]);
-//          m_namedValues = oldNamedValues;
-//      }
-//
-//      return m_builder.CreateCall(callee, args, "calltmp");
-
       std::string funcName = ctx->name()->getText();
       if (funcName == "print")
       {
@@ -1441,7 +1068,7 @@ public:
 
           if (args.empty())
           {
-              std::cerr << "Ошибка: print() должен принимать хотя бы один аргумент\n";
+//              std::cerr << "Ошибка: print() должен принимать хотя бы один аргумент\n";
               return nullptr;
           }
           llvm::Value* value = args[0];
@@ -1468,7 +1095,7 @@ public:
               }
               else
               {
-                  std::cerr << "Ошибка: неизвестный pointer type\n";
+//                  std::cerr << "Ошибка: неизвестный pointer type\n";
                   return nullptr;
               }
           }
@@ -1486,7 +1113,7 @@ public:
               }
               else
               {
-                  std::cerr << "Ошибка: неподдерживаемый тип литерала\n";
+//                  std::cerr << "Ошибка: неподдерживаемый тип литерала\n";
                   return nullptr;
               }
           }
@@ -1495,7 +1122,7 @@ public:
           llvm::Function* printFunc = getOrCreatePrint();
           if (!printFunc)
           {
-              std::cerr << "Ошибка: print не добавлен в модуль\n";
+//              std::cerr << "Ошибка: print не добавлен в модуль\n";
               return nullptr;
           }
 
@@ -1508,7 +1135,7 @@ public:
 
       llvm::Function* callee = m_namedFunctions[funcName];
       if (!callee) {
-          std::cerr << "Ошибка: функция \"" << funcName << "\" не найдена\n";
+//          std::cerr << "Ошибка: функция \"" << funcName << "\" не найдена\n";
           return nullptr;
       }
 
@@ -1520,7 +1147,7 @@ public:
 
       if (callee->arg_size() != args.size())
       {
-          std::cerr << "Ошибка: количество аргументов не совпадает для функции \"" << funcName << "\"\n";
+//          std::cerr << "Ошибка: количество аргументов не совпадает для функции \"" << funcName << "\"\n";
           return nullptr;
       }
 
@@ -1570,7 +1197,7 @@ public:
       printInfo(__FUNCTION__, ctx);
       if (!ctx->binary())
       {
-          std::cerr << "Предупреждение: пустое присваивание\n";
+//          std::cerr << "Предупреждение: пустое присваивание\n";
           return nullptr;
       }
 
@@ -1579,7 +1206,7 @@ public:
       auto* lvalueCtx = dynamic_cast<bParser::LvalueContext*>(parent);
       if (!lvalueCtx || !lvalueCtx->name())
       {
-          std::cerr << "Ошибка: присваивание без имени слева\n";
+//          std::cerr << "Ошибка: присваивание без имени слева\n";
           return nullptr;
       }
 
@@ -1595,7 +1222,7 @@ public:
       auto* lvalueCtx = dynamic_cast<bParser::LvalueContext*>(ctx->parent);
       if (!lvalueCtx || !lvalueCtx->name())
       {
-          std::cerr << "Ошибка: incdec без имени переменной\n";
+//          std::cerr << "Ошибка: incdec без имени переменной\n";
           return nullptr;
       }
 
@@ -1618,7 +1245,7 @@ public:
       }
       else
       {
-          std::cerr << "Ошибка: неизвестный оператор incdec\n";
+//          std::cerr << "Ошибка: неизвестный оператор incdec\n";
           return nullptr;
       }
       m_builder.CreateStore(result, alloca);
@@ -1631,8 +1258,9 @@ public:
       auto parent = ctx->parent;
       auto rvalueCtx = dynamic_cast<bParser::RvalueContext*>(parent);
 
-      if (!rvalueCtx) {
-          std::cerr << "Ошибка: унарный оператор без rvalue\n";
+      if (!rvalueCtx)
+      {
+//          std::cerr << "Ошибка: унарный оператор без rvalue\n";
           return nullptr;
       }
 
@@ -1645,7 +1273,8 @@ public:
       {
           llvm::Value* zero = llvm::ConstantInt::get(val->getType(), 0);
           return m_builder.CreateSub(zero, val, "negtmp");
-      } else if (op == "!")
+      }
+      else if (op == "!")
       {
           llvm::Value* zero = llvm::ConstantInt::get(val->getType(), 0);
           return m_builder.CreateICmpEQ(val, zero, "nottmp");
@@ -1725,11 +1354,11 @@ public:
           }
           else
           {
-              std::cerr << "Неизвестный бинарный оператор: " << op << std::endl;
+//              std::cerr << "Неизвестный бинарный оператор: " << op << std::endl;
               return nullptr;
           }
       }
-      std::cerr << "Кол-во аргументов не соответствует данной операции" << std::endl;
+//      std::cerr << "Кол-во аргументов не соответствует данной операции" << std::endl;
       return nullptr;
   }
 
@@ -1787,14 +1416,6 @@ public:
       printInfo(__FUNCTION__, ctx);
       std::string name = ctx->getText();
       variableWrapper wrapper = getOrCreateVariable(name);
-      if (wrapper.value)
-      {
-//          if (name != wrapper.value->getName().str())
-//          {
-//              std::cerr << "Name is not suite" << std::endl;
-//          }
-//          std::cout << name << " == " << wrapper.value->getName().str() << std::endl;
-      }
       return wrapper.value;
   }
 

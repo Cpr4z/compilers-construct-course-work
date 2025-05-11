@@ -30,26 +30,29 @@ std::unordered_map<std::string, bParser::DefinitionContext*> bBaseVisitor::m_fun
 
 int main(int argc, const char* argv[])
 {
-//    if (argc < 2)
-//    {
-//        std::cerr << "No input file" << std::endl;
-//        return 1;
-//    }
-//    std::filesystem::path pathToFile = argv[1];
-//    std::string inputFile;
-//    {
-//        std::ifstream infile(pathToFile.string());
-//        if (infile)
-//        {
-//            std::ostringstream ss;
-//            ss << infile.rdbuf();
-//            inputFile = ss.str();
-//        }
-//        else
-//        {
-//            throw std::invalid_argument("");
-//        }
-//    }
+    //testing mode
+    if (argc < 2)
+    {
+        std::cerr << "No input file" << std::endl;
+        return 1;
+    }
+    std::filesystem::path pathToFile = argv[1];
+    std::string inputFile;
+    {
+        std::ifstream infile(pathToFile.string());
+        if (infile)
+        {
+            std::ostringstream ss;
+            ss << infile.rdbuf();
+            inputFile = ss.str();
+        }
+        else
+        {
+            throw std::invalid_argument("");
+        }
+    }
+
+    //debug mode
 
 //    std::filesystem::path pathToFile = R"(/Users/matvey_agarkov/Desktop/compilers-construct-course-work/src/tests/programs/test1.b)";
 //    std::filesystem::path pathToFile = R"(/Users/matvey_agarkov/Desktop/compilers-construct-course-work/src/tests/programs/test2.b)";
@@ -61,9 +64,8 @@ int main(int argc, const char* argv[])
 //    std::filesystem::path pathToFile = R"(/Users/matvey_agarkov/Desktop/compilers-construct-course-work/src/tests/programs/test8.b)";
 //    std::filesystem::path pathToFile = R"(/Users/matvey_agarkov/Desktop/compilers-construct-course-work/src/tests/programs/test9.b)";
 //    std::filesystem::path pathToFile = R"(/Users/matvey_agarkov/Desktop/compilers-construct-course-work/src/tests/programs/test10.b)";
-    std::filesystem::path pathToFile = R"(/Users/matvey_agarkov/Desktop/compilers-construct-course-work/src/tests/programs/test11.b)";
-    std::filesystem::path currentDirectory = std::filesystem::current_path();
-    std::string inputFile;
+//    std::filesystem::path pathToFile = R"(/Users/matvey_agarkov/Desktop/compilers-construct-course-work/src/tests/programs/test11.b)";
+//    std::string inputFile;
     {
         std::ifstream infile(pathToFile);
         std::ostringstream  ss;
