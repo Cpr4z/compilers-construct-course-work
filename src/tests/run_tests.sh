@@ -1,51 +1,33 @@
 #!/bin/bash
 
-BUILD_DIR="./cmake-build-debug"
+BUILD_DIR="../cmake-build-debug"
 PROGRAMS_DIR="./programs"
 EXPECTED_DIR="./expected"
 OUTPUT_DIR="./output"
-
-mkdir -p "$OUTPUT_DIR"
+LL_DIR="./ll"
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-if [ ! -f "$BUILD_DIR/bCompiler.exe" ]; then
-  cmake -S .. -B "$BUILD_DIR" && cmake --build "$BUILD_DIR"
-  if [ $? -ne 0 ]; then
-    echo -e "${RED}[ERROR] Не удалось собрать проект.${NC}"
-    exit 1
-  fi
-else
-  echo -e "${GREEN} Найден бинарник: $BUILD_DIR/bCompiler${NC}"
-fi
-
 ALL_PASSED=true
 
+./clean.sh
 
 for file in "$PROGRAMS_DIR"/*.b; do
       filename=$(basename -- "$file")
       name="${filename%.*}"
 
-      "$BUILD_DIR/bCompiler" "$file" -o "$OUTPUT_DIR/$name.ll"
+      "$BUILD_DIR/bCompiler" "$file" -o
       if [ $? -ne 0 ]; then
           echo -e "${RED}[FAIL]${NC} Компиляция не удалась: $file"
           ALL_PASSED=false
           continue
       fi
 
-      clang "$OUTPUT_DIR/$name.ll" -o "$OUTPUT_DIR/$name.out"
-      if [ $? -ne 0 ]; then
-          echo -e "${RED}[FAIL]${NC} Линковка не удалась: $name.ll"
-          ALL_PASSED=false
-          continue
-      fi
+      lli "$LL_DIR/$name.ll" > "$OUTPUT_DIR/$name.output"
 
-      "$OUTPUT_DIR/$name.out" > "$OUTPUT_DIR/$name.output"
-
-      diff -q "$OUTPUT_DIR/$name.output" "$EXPECTED_DIR/$name.expected" > /dev/null
-      if [ $? -eq 0 ]; then
+      if diff -q "$OUTPUT_DIR/$name.output" "$EXPECTED_DIR/$name.expected" > /dev/null; then
           echo -e "${GREEN}[PASS]${NC} $name"
       else
           echo -e "${RED}[FAIL]${NC} $name"

@@ -28,6 +28,15 @@ std::unordered_map<std::string, llvm::Function*> bBaseVisitor::m_namedFunctions;
 std::unordered_map<std::string, bParser::DefinitionContext*> bBaseVisitor::m_functionBodies;
 
 
+std::filesystem::path generateLL(const std::filesystem::path& parentPath)
+{
+    std::string fileName = parentPath.stem().string();
+    auto testsDir = parentPath.parent_path().parent_path();
+    std::filesystem::path llPath = testsDir / "ll" / (fileName + ".ll");
+    return llPath;
+}
+
+
 int main(int argc, const char* argv[])
 {
     //testing mode
@@ -66,6 +75,7 @@ int main(int argc, const char* argv[])
 //    std::filesystem::path pathToFile = R"(/Users/matvey_agarkov/Desktop/compilers-construct-course-work/src/tests/programs/test10.b)";
 //    std::filesystem::path pathToFile = R"(/Users/matvey_agarkov/Desktop/compilers-construct-course-work/src/tests/programs/test11.b)";
 //    std::string inputFile;
+
     {
         std::ifstream infile(pathToFile);
         std::ostringstream  ss;
@@ -102,7 +112,9 @@ int main(int argc, const char* argv[])
     visitor.visit(prog);
 
     std::error_code EC;
-    llvm::raw_fd_ostream File((pathToFile.parent_path() / pathToFile.filename().replace_extension("ll")).string(), EC);
+    auto llPathName = generateLL(pathToFile);
+    llvm::raw_fd_ostream File(llPathName.string(), EC);
+//    llvm::raw_fd_ostream File((pathToFile.parent_path() / pathToFile.filename().replace_extension("ll")).string(), EC);
     if (EC)
     {
         llvm::errs() << "Could not open file: " << EC.message() << "\n";

@@ -389,7 +389,7 @@ public:
           }
 
           if (!value) {
-              std::cerr << "Ошибка: значение для return не получено\n";
+//              std::cerr << "Ошибка: значение для return не получено\n";
               return nullptr;
           }
 
@@ -793,7 +793,7 @@ public:
       }
 
       if (!lhs || !rhs) {
-          std::cerr << "Ошибка: одно из выражений не распознано\n";
+//          std::cerr << "Ошибка: одно из выражений не распознано\n";
           return nullptr;
       }
 
@@ -925,7 +925,6 @@ public:
       }
       else if (anyValue.type() == typeid(llvm::Value*)) {
           rawValue = std::any_cast<llvm::Value*>(anyValue);
-          rawValue->print(llvm::outs()); std::cout << '\n';
       }
       else if (anyValue.type() == typeid(llvm::CallInst*)) {
           rawValue = std::any_cast<llvm::CallInst*>(anyValue);
@@ -985,7 +984,7 @@ public:
           m_builder.CreateStore(valueToStore, destAlloca);
       }
       else {
-          std::cerr << "Ошибка: переменная " << varName << " не является допустимой alloca\n";
+//          std::cerr << "Ошибка: переменная " << varName << " не является допустимой alloca\n";
           return nullptr;
       }
       return rawValue;
