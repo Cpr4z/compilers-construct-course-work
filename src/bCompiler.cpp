@@ -4,7 +4,7 @@
 #include <filesystem>
 
 #include "llvm/Support/TargetSelect.h"
-#include "llvm/TargetParser//Host.h"
+#include "llvm/TargetParser/Host.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/MC/TargetRegistry.h"
 
