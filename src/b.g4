@@ -17,6 +17,7 @@ ival
 statement
     : externsmt
     | autosmt
+    | autoarraysmt
     | name ':' statement
     | casestmt
     | blockstmt
@@ -73,6 +74,10 @@ autosmt
     : 'auto' name constant? (',' name constant?)* ';'
     ;
 
+autoarraysmt
+    : 'auto' name '[' INT ']' ';'
+    ;
+
 rvalue
     : expression
     | comparison
@@ -90,6 +95,7 @@ comparison
 
 assignment
     : name assign rvalue
+    | name '[' rvalue ']' assign rvalue
     ;
 
 expression
@@ -101,6 +107,7 @@ expression
     | unary rvalue
     | '&' name
     | functioninvocation
+    | name '[' rvalue ']'
     ;
 
 functioninvocation
@@ -146,6 +153,7 @@ binary
 lvalue
     : name
     | '*' rvalue
+    | name '[' INT ']'
     | rvalue '[' rvalue ']'
     ;
 
@@ -182,3 +190,7 @@ BLOCKCOMMENT
 WS
     : [ \t\r\n] -> skip
     ;
+
+LBRACK : '[' ;
+
+RBRACK : ']' ;

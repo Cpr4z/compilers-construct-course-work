@@ -49,6 +49,8 @@ public:
 
     virtual std::any visitAutosmt(bParser::AutosmtContext *context) = 0;
 
+    virtual std::any visitAutoarraysmt(bParser::AutoarraysmtContext *context) = 0;
+
     virtual std::any visitRvalue(bParser::RvalueContext *context) = 0;
 
     virtual std::any visitTernary(bParser::TernaryContext *context) = 0;
@@ -58,8 +60,6 @@ public:
     virtual std::any visitAssignment(bParser::AssignmentContext *context) = 0;
 
     virtual std::any visitExpression(bParser::ExpressionContext *context) = 0;
-
-    virtual std::any visitExpressionList(bParser::ExpressionListContext *context) = 0;
 
     virtual std::any visitFunctioninvocation(bParser::FunctioninvocationContext *context) = 0;
 

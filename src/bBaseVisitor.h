@@ -3,6 +3,7 @@
 
 #pragma once
 
+
 #include "antlr4-runtime.h"
 #include "bVisitor.h"
 
@@ -28,11 +29,17 @@ namespace
 }
 
 class  bBaseVisitor : public bVisitor {
-private:
+public:
     struct variableWrapper
     {
         llvm::Value* value = nullptr;
         bool is_int = true;
+    };
+
+    struct arrayWrapper
+    {
+        llvm::Value* basePtr = nullptr;
+        int size = 0;
     };
 
     // RAII Object to switch IR context
@@ -83,16 +90,53 @@ private:
         return std::find(comparasionOperators.begin(), comparasionOperators.end(), op) != comparasionOperators.end();
     }
 
+    llvm::Value* resolveValue(std::any anyValue)
+    {
+        if (anyValue.type() == typeid(variableWrapper))
+            return std::any_cast<variableWrapper>(anyValue).value;
+        if (anyValue.type() == typeid(llvm::Value*))
+            return std::any_cast<llvm::Value*>(anyValue);
+        if (anyValue.type() == typeid(llvm::CallInst*))
+            return std::any_cast<llvm::CallInst*>(anyValue);
+        if (anyValue.type() == typeid(llvm::PHINode*))
+            return std::any_cast<llvm::PHINode*>(anyValue);
+        return nullptr;
+    }
+
+    llvm::Value* getInt32IndexValue(std::any raw) {
+        llvm::Value* val = resolveValue(raw);
+        if (!val) return nullptr;
+
+        if (val->getType()->isIntegerTy(32)) {
+            return val;
+        }
+
+        if (val->getType()->isPointerTy())
+        {
+            auto alloca = llvm::cast<llvm::AllocaInst>(val);
+            llvm::Type* elemType = alloca->getAllocatedType();
+//            llvm::Type* elemType = val->getType()->getPointerElementType();
+            if (elemType->isIntegerTy(32)) {
+                return m_builder.CreateLoad(elemType, val, "loaded_index");
+            }
+        }
+
+        std::cerr << "Ошибка: индекс должен быть int или указателем на int\n";
+        return nullptr;
+    }
+
 public:
     static llvm::LLVMContext m_context;
     static llvm::Module* m_module;
     static llvm::IRBuilder<> m_builder;
     static llvm::Function* m_function;
 
-    std::optional<std::string> m_pendingVariableName;
+//    std::optional<std::string> m_pendingVariableName;
+    std::vector<std::string> m_pendingVariableNames;
 
     static std::vector<llvm::BasicBlock*> m_blocks;
     static std::unordered_map<std::string, variableWrapper> m_namedValues;
+    static std::unordered_map<std::string, arrayWrapper> m_namedArrays;
     static std::unordered_map<std::string, llvm::BasicBlock*> m_labelMap;
     static std::unordered_set<std::string> m_pendingLabels;
     static std::stack<std::pair<llvm::SwitchInst*, llvm::BasicBlock*>> m_switchStack;
@@ -101,7 +145,6 @@ public:
     static std::unordered_map<std::string, bParser::DefinitionContext*> m_functionBodies;
 
 public:
-
     bBaseVisitor() = default;
 
     inline void printInfo(const std::string& func_name, antlr4::ParserRuleContext* ctx)
@@ -284,6 +327,9 @@ public:
       else if (ctx->autosmt())
       {
           return visit(ctx->autosmt());
+      }
+      else if (ctx->autoarraysmt()) {
+          return visit(ctx->autoarraysmt());
       }
       else if (ctx->name() && ctx->statement())
       {
@@ -566,20 +612,20 @@ public:
   virtual std::any visitExternsmt(bParser::ExternsmtContext *ctx) override
   {
       printInfo(__FUNCTION__, ctx);
-        for (auto* nameCtx : ctx->name())
-        {
-            std::string name = nameCtx->getText();
-            auto* var = new llvm::GlobalVariable(
-                    *m_module,
-                    llvm::Type::getInt32Ty(m_context),
-                    false,
-                    llvm::GlobalValue::ExternalLinkage,
-                    nullptr,
-                    name
-                    );
-            m_namedValues[name] = {var};
-        }
-        return nullptr;
+      for (auto* nameCtx : ctx->name())
+      {
+          std::string name = nameCtx->getText();
+          auto* var = new llvm::GlobalVariable(
+                  *m_module,
+                  llvm::Type::getInt32Ty(m_context),
+                  false,
+                  llvm::GlobalValue::ExternalLinkage,
+                  nullptr,
+                  name
+          );
+          m_namedValues[name] = {var};
+      }
+      return nullptr;
   }
 
   virtual std::any visitAutosmt(bParser::AutosmtContext *ctx) override
@@ -592,9 +638,13 @@ public:
           std::string name = names[i]->getText();
           if (i < constants.size() && constants[i])
           {
-              m_pendingVariableName = name;
+              m_pendingVariableNames.push_back(name);
+//              m_pendingVariableName = name;
               auto result = visit(constants[i]);
-              m_pendingVariableName.reset();
+              m_pendingVariableNames.erase(std::find(m_pendingVariableNames.begin(),
+                                                     m_pendingVariableNames.end(), name),
+                                                     m_pendingVariableNames.end());
+//              m_pendingVariableName.reset();
 
               variableWrapper wrapper = std::any_cast<variableWrapper>(result);
               llvm::AllocaInst* alloca = llvm::cast<llvm::AllocaInst>(m_namedValues[name].value);
@@ -602,9 +652,36 @@ public:
           }
           else
           {
-              m_pendingVariableName = name;
+              m_pendingVariableNames.push_back(name);
+//              m_pendingVariableName = name;
           }
       }
+      return nullptr;
+//    return visitChildren(ctx);
+  }
+
+  virtual std::any visitAutoarraysmt(bParser::AutoarraysmtContext *ctx) override
+  {
+      printInfo(__FUNCTION__, ctx);
+
+      std::string arrayName = ctx->name()->getText();
+      int arraySize = std::stoi(ctx->INT()->getText());
+
+      llvm::Type* elementType = llvm::Type::getInt32Ty(m_context); // пока только int32
+      llvm::ArrayType* arrayType = llvm::ArrayType::get(elementType, arraySize);
+
+      llvm::AllocaInst* alloca = m_builder.CreateAlloca(arrayType, nullptr, arrayName);
+
+      // сохраняем указатель как i32* (на первый элемент)
+      llvm::Value* zero = llvm::ConstantInt::get(m_builder.getInt32Ty(), 0);
+      llvm::Value* basePtr = m_builder.CreateGEP(
+              arrayType,
+              alloca,
+              {zero, zero},
+              arrayName + "_decay"
+      );
+
+      m_namedArrays[arrayName] = arrayWrapper{basePtr, arraySize};
       return nullptr;
   }
 
@@ -625,13 +702,6 @@ public:
 
       if (ctx->assignment()) {
           return visit(ctx->assignment());
-      }
-
-      // TODO remove
-      if (ctx->expressionList())
-      {
-          auto raw = visit(ctx->expressionList());
-          return std::any_cast<std::vector<int>>(raw);
       }
       return std::vector<int>{};
   }
@@ -905,86 +975,134 @@ public:
       printInfo(__FUNCTION__, ctx);
 
       std::string varName = ctx->name()->getText();
-      m_pendingVariableName = varName;
-
-      std::any anyValue = visit(ctx->rvalue());
-      llvm::Value* rawValue = nullptr;
-      if (anyValue.type() == typeid(variableWrapper))
+      auto rvalueVector = ctx->rvalue();
+      if (rvalueVector.size() == 1)
       {
-          variableWrapper wrapper = std::any_cast<variableWrapper>(anyValue);
-          llvm::Value* ptr = wrapper.value;
+          m_pendingVariableNames.push_back(varName);
+//          m_pendingVariableName = varName;
 
-          if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(ptr)) {
-              rawValue = m_builder.CreateLoad(alloca->getAllocatedType(), alloca, "loaded_from_var");
-          } else {
-              rawValue = ptr;
-          }
-      }
-      else if (anyValue.type() == typeid(llvm::Value*)) {
-          rawValue = std::any_cast<llvm::Value*>(anyValue);
-      }
-      else if (anyValue.type() == typeid(llvm::CallInst*)) {
-          rawValue = std::any_cast<llvm::CallInst*>(anyValue);
-      }
-      else if (anyValue.type() == typeid(llvm::PHINode*)) {
-          rawValue = std::any_cast<llvm::PHINode*>(anyValue);
-      }
-      else
-      {
-//          std::cerr << "Ошибка: неизвестный тип rvalue в присваивании\n";
-          return nullptr;
-      }
-
-      m_pendingVariableName.reset();
-
-      if (!rawValue) {
-//          std::cerr << "Ошибка: значение присваивания не определено\n";
-          return nullptr;
-      }
-
-      if (!m_namedValues.contains(varName))
-      {
-          llvm::AllocaInst* newAlloca = nullptr;
-          if (llvm::isa<llvm::AllocaInst>(rawValue))
+//      std::any anyValue = visit(ctx->rvalue());
+          std::any anyValue = visit(rvalueVector[0]);
+          llvm::Value* rawValue = nullptr;
+          if (anyValue.type() == typeid(variableWrapper))
           {
-              llvm::AllocaInst* oldAlloca = llvm::cast<llvm::AllocaInst>(rawValue);
-                llvm::Type* oldType = oldAlloca->getAllocatedType();
-                newAlloca = m_builder.CreateAlloca(oldType, nullptr, varName);
-              m_namedValues[varName] = variableWrapper{newAlloca, true};
+              variableWrapper wrapper = std::any_cast<variableWrapper>(anyValue);
+              llvm::Value* ptr = wrapper.value;
+
+              if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(ptr)) {
+                  rawValue = m_builder.CreateLoad(alloca->getAllocatedType(), alloca, "loaded_from_var");
+              } else {
+                  rawValue = ptr;
+              }
+          }
+          else if (anyValue.type() == typeid(llvm::Value*)) {
+              rawValue = std::any_cast<llvm::Value*>(anyValue);
+          }
+          else if (anyValue.type() == typeid(llvm::CallInst*)) {
+              rawValue = std::any_cast<llvm::CallInst*>(anyValue);
+          }
+          else if (anyValue.type() == typeid(llvm::PHINode*)) {
+              rawValue = std::any_cast<llvm::PHINode*>(anyValue);
           }
           else
           {
-              newAlloca = m_builder.CreateAlloca(rawValue->getType(), nullptr, varName);
+//          std::cerr << "Ошибка: неизвестный тип rvalue в присваивании\n";
+              return nullptr;
           }
-          m_namedValues[varName] = variableWrapper{newAlloca, true};
-      }
 
-      llvm::Value* target = m_namedValues[varName].value;
-      if (auto* destAlloca = llvm::dyn_cast<llvm::AllocaInst>(target))
-      {
-          llvm::Value* valueToStore = rawValue;
+          m_pendingVariableNames.erase(std::find(m_pendingVariableNames.begin(),
+                                                 m_pendingVariableNames.end(), varName),
+                                                 m_pendingVariableNames.end());
+//          m_pendingVariableName.reset();
 
-          if (llvm::isa<llvm::AllocaInst>(rawValue))
-          {
-              auto* alloca = llvm::cast<llvm::AllocaInst>(rawValue);
-              llvm::Type* type = alloca->getAllocatedType();
-              valueToStore = m_builder.CreateLoad(type, rawValue, "loaded_rhs");
+          if (!rawValue) {
+//          std::cerr << "Ошибка: значение присваивания не определено\n";
+              return nullptr;
           }
-          else if (llvm::isa<llvm::PHINode>(rawValue))
+
+          if (!m_namedValues.contains(varName))
           {
-              valueToStore = rawValue;
+              llvm::AllocaInst* newAlloca = nullptr;
+              if (llvm::isa<llvm::AllocaInst>(rawValue))
+              {
+                  llvm::AllocaInst* oldAlloca = llvm::cast<llvm::AllocaInst>(rawValue);
+                  llvm::Type* oldType = oldAlloca->getAllocatedType();
+                  newAlloca = m_builder.CreateAlloca(oldType, nullptr, varName);
+                  m_namedValues[varName] = variableWrapper{newAlloca, true};
+              }
+              else
+              {
+                  newAlloca = m_builder.CreateAlloca(rawValue->getType(), nullptr, varName);
+              }
+              m_namedValues[varName] = variableWrapper{newAlloca, true};
           }
-          else if (rawValue->getType()->isPointerTy())
+
+          llvm::Value* target = m_namedValues[varName].value;
+          if (auto* destAlloca = llvm::dyn_cast<llvm::AllocaInst>(target))
           {
+              llvm::Value* valueToStore = rawValue;
+
+              if (llvm::isa<llvm::AllocaInst>(rawValue))
+              {
+                  auto* alloca = llvm::cast<llvm::AllocaInst>(rawValue);
+                  llvm::Type* type = alloca->getAllocatedType();
+                  valueToStore = m_builder.CreateLoad(type, rawValue, "loaded_rhs");
+              }
+              else if (llvm::isa<llvm::PHINode>(rawValue))
+              {
+                  valueToStore = rawValue;
+              }
+              else if (rawValue->getType()->isPointerTy())
+              {
 //              std::cerr << "Предупреждение: pointer value без alloca/PHI: " << varName << "\n";
+              }
+              m_builder.CreateStore(valueToStore, destAlloca);
           }
-          m_builder.CreateStore(valueToStore, destAlloca);
-      }
-      else {
+          else {
 //          std::cerr << "Ошибка: переменная " << varName << " не является допустимой alloca\n";
-          return nullptr;
+              return nullptr;
+          }
+          return rawValue;
       }
-      return rawValue;
+      else if (rvalueVector.size() == 2)
+      {
+          std::string arrayName = ctx->name()->getText();
+          llvm::Value* index = resolveValue(visit(ctx->rvalue(0)));
+          llvm::Value* value = resolveValue(visit(ctx->rvalue(1)));
+
+          if (!index || !value) return nullptr;
+
+          auto it = m_namedArrays.find(arrayName);
+          if (it == m_namedArrays.end()) {
+              // ошибка: массив не найден
+              return nullptr;
+          }
+
+          llvm::Value* basePtr = it->second.basePtr;
+          if (index->getType()->isPointerTy()) {
+              index = m_builder.CreateLoad(llvm::Type::getInt32Ty(m_context), index, "loaded_index");
+          }
+
+          // GEP: arr[i] = ...
+          llvm::Value* elemPtr = m_builder.CreateGEP(
+                  llvm::Type::getInt32Ty(m_context), // тип элемента (пока только i32)
+                  basePtr,
+                  index,
+                  arrayName + "_elem"
+          );
+
+          llvm::Value* loadedValue = value;
+          llvm::Type* elementType = llvm::Type::getInt32Ty(m_context);
+          if (value->getType()->isPointerTy())
+          {
+              loadedValue = m_builder.CreateLoad(elementType, value, arrayName + "_loaded_rhs");
+          }
+
+//          m_builder.CreateStore(value, elemPtr);
+          m_builder.CreateStore(loadedValue, elemPtr);
+          return value;
+      }
+      return nullptr;
   }
 
   virtual std::any visitExpression(bParser::ExpressionContext *ctx) override
@@ -997,6 +1115,38 @@ public:
               return visit(ctx->rvalue()->comparison());
           }
           return visit(ctx->rvalue());
+      }
+
+      if (ctx->name() && ctx->rvalue() && ctx->children.size() == 4)
+      {
+          std::string arrayName = ctx->name()->getText();
+
+          if (!m_namedArrays.contains(arrayName))
+          {
+              std::cerr << "Ошибка: массив " << arrayName << " не найден\n";
+              return nullptr;
+          }
+
+//          llvm::Value* index = resolveValue(visit(ctx->rvalue()));
+          llvm::Value* index = getInt32IndexValue(visit(ctx->rvalue()));
+          if (!index) return nullptr;
+
+          llvm::Value* basePtr = m_namedArrays[arrayName].basePtr;
+
+          llvm::Value* elementPtr = m_builder.CreateGEP(
+                  llvm::Type::getInt32Ty(m_context), // тип элемента массива
+                  basePtr,
+                  index,
+                  arrayName + "_elem"
+          );
+
+          llvm::Value* loaded = m_builder.CreateLoad(
+                  llvm::Type::getInt32Ty(m_context),
+                  elementPtr,
+                  arrayName + "_val"
+          );
+
+          return loaded;
       }
 
       if (ctx->name() && !ctx->incdec() && ctx->children.size() == 1)
@@ -1038,17 +1188,6 @@ public:
 //      std::cerr << "Не удалось распознать выражение\n";
       return nullptr;
   }
-
- virtual std::any visitExpressionList(bParser::ExpressionListContext *ctx) override
- {
-     std::vector<std::any> values;
-     for (auto child : ctx->rvalue())
-     {
-         auto val = visit(child);
-         values.push_back(val);
-     }
-     return values;
- }
 
   virtual std::any visitFunctioninvocation(bParser::FunctioninvocationContext *ctx) override
   {
@@ -1361,32 +1500,138 @@ public:
   virtual std::any visitLvalue(bParser::LvalueContext *ctx) override
   {
       printInfo(__FUNCTION__, ctx);
-    return visitChildren(ctx);
+
+      size_t rvsize = ctx->rvalue().size();
+
+      if (rvsize == 0 && ctx->name()) {
+          std::string varName = ctx->name()->getText();
+          if (m_namedValues.contains(varName)) {
+              return m_namedValues[varName].value;
+          }
+          if (m_namedArrays.contains(varName)) {
+              return m_namedArrays[varName].basePtr;
+          }
+          std::cerr << "Ошибка: переменная " << varName << " не найдена\n";
+          return nullptr;
+      }
+
+      if (rvsize == 1 && ctx->getStart()->getText() == "*") {
+          llvm::Value* ptr = resolveValue(visit(ctx->rvalue(0)));
+          return ptr; // верни указатель как есть
+      }
+
+      if (rvsize == 0 && ctx->name() && ctx->INT()) {
+          std::string arrayName = ctx->name()->getText();
+          if (!m_namedArrays.contains(arrayName)) {
+              std::cerr << "Ошибка: массив " << arrayName << " не найден\n";
+              return nullptr;
+          }
+
+          llvm::Value* basePtr = m_namedArrays[arrayName].basePtr;
+          int indexVal = std::stoi(ctx->INT()->getText());
+
+          llvm::Value* index = llvm::ConstantInt::get(
+                  llvm::Type::getInt32Ty(m_context),
+                  indexVal
+          );
+
+          return m_builder.CreateGEP(
+                  llvm::Type::getInt32Ty(m_context),
+                  basePtr,
+                  index,
+                  arrayName + "_elem"
+          );
+      }
+
+      if (rvsize == 2) {
+          llvm::Value* base = resolveValue(visit(ctx->rvalue(0)));
+          llvm::Value* index = resolveValue(visit(ctx->rvalue(1)));
+
+          if (!base || !index) return nullptr;
+
+          if (!index->getType()->isIntegerTy()) {
+              if (index->getType()->isPointerTy())
+              {
+                  auto* alloca = llvm::cast<llvm::AllocaInst>(index);
+                  llvm::Type* type = alloca->getAllocatedType();
+                  if (type->isIntegerTy(32)) {
+                      index = m_builder.CreateLoad(
+                              type,
+                              index,
+                              "loaded_index"
+                      );
+                  } else {
+                      std::cerr << "Ошибка: указатель на не-integer тип в качестве индекса\n";
+                      return nullptr;
+                  }
+              } else {
+                  std::cerr << "Ошибка: индекс должен быть int или pointer to int\n";
+                  return nullptr;
+              }
+          }
+
+          return m_builder.CreateGEP(
+                  llvm::Type::getInt32Ty(m_context),
+                  base,
+                  index,
+                  "ptr_indexed"
+          );
+      }
+
+      std::cerr << "Ошибка: lvalue не распознано\n";
+      return nullptr;
   }
 
   virtual std::any visitConstant(bParser::ConstantContext *ctx) override
   {
       printInfo(__FUNCTION__, ctx);
-      if (m_pendingVariableName)
+
+      llvm::Type* type = nullptr;
+      llvm::Value* Value = nullptr;
+
+//      if (m_pendingVariableName)
+//      {
+//          llvm::Type* type;
+//          llvm::Value* value;
+//          if (ctx->INT())
+//          {
+//              int v = std::stoi(ctx->getText());
+//              value = llvm::ConstantInt::get(llvm::Type::getInt32Ty(m_context), v);
+//              llvm::AllocaInst* alloc = m_builder.CreateAlloca(llvm::Type::getInt32Ty(m_context), nullptr, *m_pendingVariableName);
+//              m_namedValues[*m_pendingVariableName] = variableWrapper{alloc, true};
+//              m_builder.CreateStore(value, alloc);
+//          }
+//          else if (ctx->STRING1() || ctx->STRING2())
+//          {
+//              std::string raw = ctx->getText();
+//              std::string stripped = raw.substr(1, raw.length() - 2);
+//              value = m_builder.CreateGlobalString(stripped);
+//              m_namedValues[*m_pendingVariableName] = variableWrapper{value, false};
+//          }
+//          return getOrCreateVariable(*m_pendingVariableName);
+//      }
+      if (!m_pendingVariableNames.empty())
       {
-          llvm::Type* type;
-          llvm::Value* value;
+          std::string varName = m_pendingVariableNames.back();
+          m_pendingVariableNames.pop_back();
+
           if (ctx->INT())
           {
               int v = std::stoi(ctx->getText());
-              value = llvm::ConstantInt::get(llvm::Type::getInt32Ty(m_context), v);
-              llvm::AllocaInst* alloc = m_builder.CreateAlloca(llvm::Type::getInt32Ty(m_context), nullptr, *m_pendingVariableName);
-              m_namedValues[*m_pendingVariableName] = variableWrapper{alloc, true};
-              m_builder.CreateStore(value, alloc);
+              Value = llvm::ConstantInt::get(llvm::Type::getInt32Ty(m_context), v);
+              llvm::AllocaInst* alloc = m_builder.CreateAlloca(llvm::Type::getInt32Ty(m_context), nullptr, varName);
+              m_namedValues[varName] = variableWrapper{alloc, true};
+              m_builder.CreateStore(Value, alloc);
           }
           else if (ctx->STRING1() || ctx->STRING2())
           {
               std::string raw = ctx->getText();
               std::string stripped = raw.substr(1, raw.length() - 2);
-              value = m_builder.CreateGlobalString(stripped);
-              m_namedValues[*m_pendingVariableName] = variableWrapper{value, false};
+              Value = m_builder.CreateGlobalString(stripped);
+              m_namedValues[varName] = variableWrapper{Value, false};
           }
-          return getOrCreateVariable(*m_pendingVariableName);
+
+          return getOrCreateVariable(varName);
       }
       else
       {

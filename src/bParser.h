@@ -17,19 +17,19 @@ public:
     T__14 = 15, T__15 = 16, T__16 = 17, T__17 = 18, T__18 = 19, T__19 = 20, 
     T__20 = 21, T__21 = 22, T__22 = 23, T__23 = 24, T__24 = 25, T__25 = 26, 
     T__26 = 27, T__27 = 28, T__28 = 29, T__29 = 30, T__30 = 31, T__31 = 32, 
-    T__32 = 33, T__33 = 34, T__34 = 35, T__35 = 36, T__36 = 37, T__37 = 38, 
-    NAME = 39, INT = 40, STRING1 = 41, STRING2 = 42, BLOCKCOMMENT = 43, 
-    WS = 44
+    T__32 = 33, T__33 = 34, T__34 = 35, T__35 = 36, NAME = 37, INT = 38, 
+    STRING1 = 39, STRING2 = 40, BLOCKCOMMENT = 41, WS = 42, LBRACK = 43, 
+    RBRACK = 44
   };
 
   enum {
     RuleProgram = 0, RuleDefinition = 1, RuleIval = 2, RuleStatement = 3, 
     RuleNullstmt = 4, RuleExpressionstmt = 5, RuleBlockstmt = 6, RuleReturnstmt = 7, 
     RuleGotostmt = 8, RuleSwitchstmt = 9, RuleWhilestmt = 10, RuleIfstmt = 11, 
-    RuleCasestmt = 12, RuleExternsmt = 13, RuleAutosmt = 14, RuleRvalue = 15, 
-    RuleTernary = 16, RuleComparison = 17, RuleAssignment = 18, RuleExpression = 19,
-    RuleExpressionList = 20, RuleFunctioninvocation = 21, RuleFunctionparameters = 22,
-    RuleAssign = 23, RuleIncdec = 24, RuleUnary = 25, RuleBinary = 26, RuleLvalue = 27,
+    RuleCasestmt = 12, RuleExternsmt = 13, RuleAutosmt = 14, RuleAutoarraysmt = 15, 
+    RuleRvalue = 16, RuleTernary = 17, RuleComparison = 18, RuleAssignment = 19, 
+    RuleExpression = 20, RuleFunctioninvocation = 21, RuleFunctionparameters = 22, 
+    RuleAssign = 23, RuleIncdec = 24, RuleUnary = 25, RuleBinary = 26, RuleLvalue = 27, 
     RuleConstant = 28, RuleName = 29
   };
 
@@ -65,12 +65,12 @@ public:
   class CasestmtContext;
   class ExternsmtContext;
   class AutosmtContext;
+  class AutoarraysmtContext;
   class RvalueContext;
   class TernaryContext;
   class ComparisonContext;
   class AssignmentContext;
   class ExpressionContext;
-  class ExpressionListContext;
   class FunctioninvocationContext;
   class FunctionparametersContext;
   class AssignContext;
@@ -140,6 +140,7 @@ public:
     virtual size_t getRuleIndex() const override;
     ExternsmtContext *externsmt();
     AutosmtContext *autosmt();
+    AutoarraysmtContext *autoarraysmt();
     NameContext *name();
     StatementContext *statement();
     CasestmtContext *casestmt();
@@ -335,6 +336,24 @@ public:
 
   AutosmtContext* autosmt();
 
+  class  AutoarraysmtContext : public antlr4::ParserRuleContext {
+  public:
+    AutoarraysmtContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    NameContext *name();
+    antlr4::tree::TerminalNode *LBRACK();
+    antlr4::tree::TerminalNode *INT();
+    antlr4::tree::TerminalNode *RBRACK();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+   
+  };
+
+  AutoarraysmtContext* autoarraysmt();
+
   class  RvalueContext : public antlr4::ParserRuleContext {
   public:
     RvalueContext(antlr4::ParserRuleContext *parent, size_t invokingState);
@@ -343,7 +362,6 @@ public:
     ComparisonContext *comparison();
     TernaryContext *ternary();
     AssignmentContext *assignment();
-    ExpressionListContext *expressionList();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
@@ -394,7 +412,10 @@ public:
     virtual size_t getRuleIndex() const override;
     NameContext *name();
     AssignContext *assign();
-    RvalueContext *rvalue();
+    std::vector<RvalueContext *> rvalue();
+    RvalueContext* rvalue(size_t i);
+    antlr4::tree::TerminalNode *LBRACK();
+    antlr4::tree::TerminalNode *RBRACK();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
@@ -415,6 +436,8 @@ public:
     IncdecContext *incdec();
     UnaryContext *unary();
     FunctioninvocationContext *functioninvocation();
+    antlr4::tree::TerminalNode *LBRACK();
+    antlr4::tree::TerminalNode *RBRACK();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
@@ -424,22 +447,6 @@ public:
   };
 
   ExpressionContext* expression();
-
-    class  ExpressionListContext : public antlr4::ParserRuleContext {
-    public:
-        ExpressionListContext(antlr4::ParserRuleContext *parent, size_t invokingState);
-        virtual size_t getRuleIndex() const override;
-        std::vector<RvalueContext *> rvalue();
-        RvalueContext* rvalue(size_t i);
-
-        virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
-        virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
-
-        virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
-
-    };
-
-    ExpressionListContext* expressionList();
 
   class  FunctioninvocationContext : public antlr4::ParserRuleContext {
   public:
@@ -537,6 +544,9 @@ public:
     NameContext *name();
     std::vector<RvalueContext *> rvalue();
     RvalueContext* rvalue(size_t i);
+    antlr4::tree::TerminalNode *LBRACK();
+    antlr4::tree::TerminalNode *INT();
+    antlr4::tree::TerminalNode *RBRACK();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;

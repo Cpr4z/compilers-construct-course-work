@@ -61,6 +61,9 @@ public:
   virtual void enterAutosmt(bParser::AutosmtContext * /*ctx*/) override { }
   virtual void exitAutosmt(bParser::AutosmtContext * /*ctx*/) override { }
 
+  virtual void enterAutoarraysmt(bParser::AutoarraysmtContext * /*ctx*/) override { }
+  virtual void exitAutoarraysmt(bParser::AutoarraysmtContext * /*ctx*/) override { }
+
   virtual void enterRvalue(bParser::RvalueContext * /*ctx*/) override { }
   virtual void exitRvalue(bParser::RvalueContext * /*ctx*/) override { }
 
@@ -75,9 +78,6 @@ public:
 
   virtual void enterExpression(bParser::ExpressionContext * /*ctx*/) override { }
   virtual void exitExpression(bParser::ExpressionContext * /*ctx*/) override { }
-
-  virtual void enterExpressionList(bParser::ExpressionListContext * /*ctx*/) override { }
-  virtual void exitExpressionList(bParser::ExpressionListContext * /*ctx*/) override { }
 
   virtual void enterFunctioninvocation(bParser::FunctioninvocationContext * /*ctx*/) override { }
   virtual void exitFunctioninvocation(bParser::FunctioninvocationContext * /*ctx*/) override { }

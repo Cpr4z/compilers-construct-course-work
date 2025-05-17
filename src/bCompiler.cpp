@@ -20,6 +20,7 @@ llvm::Function* bBaseVisitor::m_function = nullptr;
 
 std::vector<llvm::BasicBlock*> bBaseVisitor::m_blocks;
 std::unordered_map<std::string, bBaseVisitor::variableWrapper> bBaseVisitor::m_namedValues;
+std::unordered_map<std::string, bBaseVisitor::arrayWrapper> bBaseVisitor::m_namedArrays;
 std::unordered_map<std::string, llvm::BasicBlock*> bBaseVisitor::m_labelMap;
 std::unordered_set<std::string> bBaseVisitor::m_pendingLabels;
 std::stack<std::pair<llvm::SwitchInst*, llvm::BasicBlock*>> bBaseVisitor::m_switchStack;
@@ -73,6 +74,7 @@ int main(int argc, const char* argv[])
 //    std::filesystem::path pathToFile = R"(/Users/matvey_agarkov/Desktop/compilers-construct-course-work/src/tests/programs/test9.b)";
 //    std::filesystem::path pathToFile = R"(/Users/matvey_agarkov/Desktop/compilers-construct-course-work/src/tests/programs/test10.b)";
 //    std::filesystem::path pathToFile = R"(/Users/matvey_agarkov/Desktop/compilers-construct-course-work/src/tests/programs/test11.b)";
+//    std::filesystem::path pathToFile = R"(/Users/matvey_agarkov/Desktop/compilers-construct-course-work/src/tests/programs/test12.b)";
 //    std::string inputFile;
 
     {
