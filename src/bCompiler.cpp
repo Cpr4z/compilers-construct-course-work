@@ -61,8 +61,7 @@ int main(int argc, const char* argv[])
         }
     }
 
-    //debug mode
-
+//debug mode
 //    std::filesystem::path pathToFile = R"(/Users/matvey_agarkov/Desktop/compilers-construct-course-work/src/tests/programs/test1.b)";
 //    std::filesystem::path pathToFile = R"(/Users/matvey_agarkov/Desktop/compilers-construct-course-work/src/tests/programs/test2.b)";
 //    std::filesystem::path pathToFile = R"(/Users/matvey_agarkov/Desktop/compilers-construct-course-work/src/tests/programs/test3.b)";
@@ -114,7 +113,6 @@ int main(int argc, const char* argv[])
     std::error_code EC;
     auto llPathName = generateLL(pathToFile);
     llvm::raw_fd_ostream File(llPathName.string(), EC);
-//    llvm::raw_fd_ostream File((pathToFile.parent_path() / pathToFile.filename().replace_extension("ll")).string(), EC);
     if (EC)
     {
         llvm::errs() << "Could not open file: " << EC.message() << "\n";

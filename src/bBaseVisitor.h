@@ -141,7 +141,6 @@ public:
         }
         m_namedValues[name] = variableWrapper{};
         return m_namedValues[name];
-
     }
 
     llvm::Function* getOrCreatePrint()
@@ -379,7 +378,6 @@ public:
       {
           llvm::Value* value = nullptr;
           auto anyValue = visit(rvalue);
-
           if (anyValue.type() == typeid(llvm::Value*)) {
               value = std::any_cast<llvm::Value*>(anyValue);
           }
@@ -466,7 +464,6 @@ public:
   {
       printInfo(__FUNCTION__, ctx);
       llvm::Function* function = m_builder.GetInsertBlock()->getParent();
-
       llvm::BasicBlock* condBlock = llvm::BasicBlock::Create(m_context, "while.cond", function);
       llvm::BasicBlock* bodyBlock = llvm::BasicBlock::Create(m_context, "while.body", function);
       llvm::BasicBlock* endBlock  = llvm::BasicBlock::Create(m_context, "while.end", function);
