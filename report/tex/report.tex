@@ -1,0 +1,51 @@
+\documentclass{bmstu}
+
+\usepackage{longtable}
+\usepackage{graphicx}
+
+\usepackage{listings}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+
+\usepackage{listings}
+\usepackage{xcolor}
+
+\lstdefinelanguage{ANTLR}{
+  morekeywords={grammar, fragment, lexer, parser, returns, options, tokens, import},
+  sensitive=true,
+  morecomment=[l]{//},
+  morecomment=[s]{/*}{*/},
+  morestring=[b]"
+}
+
+\lstset{
+  language=ANTLR,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue},
+  commentstyle=\color{gray},
+  stringstyle=\color{teal},
+  breaklines=true,
+  tabsize=2,
+  showstringspaces=false
+}
+
+\addbibresource{lib.bib}
+
+\begin{document}
+
+\include{00-tital.tex}
+\setcounter{page}{3}
+\include{01-intro.tex}
+\include{02-analysis.tex}
+\include{03-design.tex}
+\include{04-implement.tex}
+\include{05-conclusion.tex}
+\include{lib}
+
+\include{06-attachments.tex}
+\include{07-attachments.tex}
+\include{08-attachments.tex}
+% \include{lib.tex}
+
+\end{document}

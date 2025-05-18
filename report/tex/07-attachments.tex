@@ -1,0 +1,334 @@
+\chapter*{\textbf{ПРИЛОЖЕНИЕ B}}
+\addcontentsline{toc}{chapter}{\textbf{ПРИЛОЖЕНИЕ B}}
+
+
+\lstdefinelanguage{B}{
+  morekeywords={main, auto, while, if, else, return},
+  sensitive=true,
+  morecomment=[l]{//},
+  morecomment=[s]{/*}{*/},
+  morestring=[b]",
+}
+
+
+\begin{lstlisting}[
+	caption={Тестовая программа №1},
+	label={lst:while-b},
+	language={B},
+	gobble=8
+]
+        main() {
+            auto a;
+            a = 9;
+            auto b;
+            b = 34;
+            auto c;
+            c = 'abc';
+            print(a);
+            print(b);
+            print(c);
+            print(2);
+            print('abcd');
+            print(a);
+            print(b);
+        }
+\end{lstlisting}
+
+
+
+\begin{lstlisting}[
+	caption={Тестовая программа №2},
+	label={lst:while-b},
+	language={B},
+	gobble=8
+]
+        main() {
+            auto a;
+            auto b;
+            a = 6;
+            b = 1981;
+
+            auto tmp;
+            tmp = max(a, b);
+            print(max(a, b));
+        }
+
+        max(a, b) {
+            if (a > 0) {
+                print(1);
+            }
+            a = 3;
+            auto result;
+            result = a;
+            print(result);
+            print(a);
+            return (result);
+        }
+
+\end{lstlisting}
+
+
+\begin{lstlisting}[
+	caption={Тестовая программа №3},
+	label={lst:while-b},
+	language={B},
+	gobble=8
+]
+        main() {
+            auto i;
+            i = 0;
+            while (i <= 10) {
+                print(i);
+                i++;
+                i++;
+            }
+
+            auto j;
+            j = 0;
+            while (j <= 10) {
+                print(j);
+                j++;
+            }
+
+            auto k;
+            k = 0;
+        }
+\end{lstlisting}
+
+
+
+\begin{lstlisting}[
+	caption={Тестовая программа №4},
+	label={lst:while-b},
+	language={B},
+	gobble=8
+]
+        main() {
+            auto x;
+            x = 1;
+            ++x;
+            x++;
+            --x;
+            print(x);
+        }
+\end{lstlisting}
+
+
+
+\begin{lstlisting}[
+	caption={Тестовая программа №5},
+	label={lst:while-b},
+	language={B},
+	gobble=8
+]
+        main() {
+            auto n;
+            n = 5;
+            while (n != 0) {
+                print(n);
+                n--;
+            }
+            f(24, 42);
+            return (0);
+        }
+
+        f(s, y) {
+            print(s);
+            print(y);
+            return (0);
+        }
+\end{lstlisting}
+
+
+\begin{lstlisting}[
+	caption={Тестовая программа №6},
+	label={lst:while-b},
+	language={B},
+	gobble=8
+]
+        main() {
+            Print1();
+            Print2(31415);
+            Print3(777, 34);
+        }
+
+        Print1() {
+            print("Hi!");
+        }
+
+        Print2(x) {
+            print(x);
+        }
+
+        Print3(x, y) {
+            print(x);
+            print(y);
+        }
+\end{lstlisting}
+
+
+\begin{lstlisting}[
+	caption={Тестовая программа №7},
+	label={lst:while-b},
+	language={B},
+	gobble=8
+]
+        max(a, b) {
+            auto result;
+            result = a > b ? a : b;
+            print(a);
+            print(b);
+            print(result);
+        }
+
+        main() {
+            max(10, 20);
+        }
+\end{lstlisting}
+
+
+\begin{lstlisting}[
+	caption={Тестовая программа №8},
+	label={lst:while-b},
+	language={B},
+	gobble=8
+]
+          main() {
+              someFunc(1982, 3);
+              someFunc(0, 0);
+          }
+
+          someFunc(a, b) {
+              if ((a + b) > 0) {
+                  print("a + b > 0");
+              }
+              else {
+                  print("a + b <= 0");
+              }
+          }
+\end{lstlisting}
+
+
+\begin{lstlisting}[
+	caption={Тестовая программа №9},
+	label={lst:while-b},
+	language={B},
+	gobble=8
+]
+        main() {
+            auto x;
+            x = 2;
+
+            switch x {
+                case 1: {
+                    print(100);
+                }
+                case 2: {
+                    print(200);
+                }
+                case 3: {
+                    print(300);
+                }
+            }
+        }
+\end{lstlisting}
+
+
+
+\begin{lstlisting}[
+	caption={Тестовая программа №10},
+	label={lst:while-b},
+	language={B},
+	gobble=8
+]
+        main() {
+            auto x;
+            x = 5;
+            goTOfunc(0);
+            x = -3;
+            goTOfunc(4);
+        }
+
+        goTOfunc(y) {
+            if (y > 0) {
+                goto label1;
+            }
+            print(0);
+            label1 : print(42);
+        }
+\end{lstlisting}
+
+
+\begin{lstlisting}[
+	caption={Тестовая программа №11},
+	label={lst:while-b},
+	language={B},
+	gobble=8
+]
+          main() {
+              auto x;
+              auto y;
+              auto max;
+              max = 2;
+              x = 10;
+              y = 20;
+              max = x > y ? x : y;
+              print(max);
+          }
+\end{lstlisting}
+
+
+
+
+\begin{lstlisting}[
+	caption={Тестовая программа №12},
+	label={lst:while-b},
+	language={B},
+	gobble=8
+]
+          main()
+          {
+              auto arr[5];
+              arr[0] = 1;
+              arr[1] = 2;
+              arr[2] = 3;
+              arr[3] = 4;
+              arr[4] = 5;
+
+              auto i;
+              auto j;
+              auto tmp1;
+              auto tmp2;
+
+              i = 0;
+              j = 4;
+
+              auto tmpCounter;
+              tmpCounter = 0;
+
+              while (tmpCounter < 5)
+              {
+                  print(arr[tmpCounter]);
+                  ++tmpCounter;
+              }
+
+              while (i < j)
+              {
+                  tmp1 = arr[i];
+                  tmp2 = arr[j];
+                  arr[i] = tmp2;
+                  arr[j] = tmp1;
+                  ++i;
+                  --j;
+              }
+
+              print(" ");
+
+              tmpCounter = 0;
+              while (tmpCounter < 5)
+              {
+                  print(arr[tmpCounter]);
+                  ++tmpCounter;
+              }
+          }
+\end{lstlisting}

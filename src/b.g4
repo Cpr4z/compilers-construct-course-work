@@ -190,7 +190,3 @@ BLOCKCOMMENT
 WS
     : [ \t\r\n] -> skip
     ;
-
-LBRACK : '[' ;
-
-RBRACK : ']' ;
