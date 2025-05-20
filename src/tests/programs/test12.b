@@ -29,6 +29,7 @@ main()
         tmp1 = arr[i];
         tmp2 = arr[j];
         arr[i] = tmp2;
+        arr[i] = arr[j];
         arr[j] = tmp1;
         ++i;
         --j;

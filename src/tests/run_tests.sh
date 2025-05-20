@@ -18,6 +18,10 @@ for file in "$PROGRAMS_DIR"/*.b; do
       filename=$(basename -- "$file")
       name="${filename%.*}"
 
+      if [[ ! "$name" =~ ^test[0-9]+$ ]]; then
+          continue
+      fi
+
       "$BUILD_DIR/bCompiler" "$file" -o
       if [ $? -ne 0 ]; then
           echo -e "${RED}[FAIL]${NC} Компиляция не удалась: $file"
